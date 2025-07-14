@@ -18,6 +18,7 @@ using System.Collections.Concurrent;
 using System.Drawing;
 using System.Drawing.Imaging;
 using Microsoft.AspNetCore.Mvc;
+using DotNetEnv;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,11 +33,15 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Load Twilio configuration
-builder.Configuration.AddJsonFile("twilio.json", optional: true, reloadOnChange: true);
+// Load environment variables from .env
+Env.Load();
 
-// Register Twilio options for DI
-builder.Services.Configure<TwilioOptions>(builder.Configuration.GetSection("Twilio"));
+// Register Twilio options for DI using environment variables
+builder.Services.Configure<TwilioOptions>(options => {
+    options.AccountSid = Environment.GetEnvironmentVariable("TWILIO_ACCOUNT_SID") ?? string.Empty;
+    options.AuthToken = Environment.GetEnvironmentVariable("TWILIO_AUTH_TOKEN") ?? string.Empty;
+    options.FromNumber = Environment.GetEnvironmentVariable("TWILIO_FROM_NUMBER") ?? string.Empty;
+});
 
 // camelCase JSON for JS
 builder.Services.ConfigureHttpJsonOptions(opt =>
