@@ -142,7 +142,7 @@ All endpoints are under `/api/` and require authentication (token in `Authorizat
 
 ### Configuration
 
-- **Twilio**: Set your Twilio credentials in `SimpleBackend/twilio.json`:
+- **Twilio**: Set your Twilio credentials in `twilio.json`:
   ```json
   {
     "Twilio": {
@@ -164,7 +164,7 @@ All endpoints are under `/api/` and require authentication (token in `Authorizat
 
 2. **Build and run the backend**:
    ```
-   dotnet run --project SimpleBackend/SimpleBackend.csproj
+   dotnet run --project SimpleBackend.csproj
    ```
 
 3. **Access the app**:
