@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab Results</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <script src="/static/js/config.js"></script>
+  <script src="/static/js/services/reminderService.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script>
+    const { useState, useEffect } = React;
+
+function LabResults() {
+  const pid = new URLSearchParams(window.location.search).get('pid');
+  if (pid) localStorage.setItem('currentPid', pid);
+  const [patient, setPatient] = useState(null);
+  const currentPid = pid || localStorage.getItem('currentPid') || 'anonymous';
+  const [labs, setLabs] = useState([]); // INITIALLY EMPTY, WILL FETCH FROM DB
+  const [formData, setFormData] = useState({
+    id: null,
+    testName: '',
+    date: '',
+    dateOfVisit: '',
+    result: '',
+    range: '',
+    notes: '',
+    physiologicBasis: '',
+    interpretation: '',
+    comments: '',
+    phoneNumber: '',
+  });
+  const [isEditing, setIsEditing] = useState(false);
+  const [editLabId, setEditLabId] = useState(null);
+
+  useEffect(() => {
+    // fetch patient data
+    if (pid) {
+      fetch(`/api/patients/${pid}`)
+        .then(r => r.ok ? r.json() : Promise.reject('not found'))
+        .then(p => {
+          setPatient(p);
+          document.title = `Lab Results - ${p.name}`;
+        })
+        .catch(console.error);
+    }
+  }, [pid]);
+
+  // FETCH LABS FROM DB
+  useEffect(() => {
+    if (!pid) return;
+    const doctorId = localStorage.getItem('doctorId');
+    const token = localStorage.getItem('token') || '';
+    if (!token) {
+      alert('You are not logged in. Please log in again.');
+      setLabs([]);
+      return;
+    }
+    fetch(`/api/labreports/patient/${pid}?doctorId=${doctorId}`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    })
+      .then(r => {
+        if (r.status === 401) {
+          alert('Session expired or unauthorized. Please log in again.');
+          setLabs([]);
+          return [];
+        }
+        if (!r.ok) {
+          alert('Failed to fetch lab reports. Server error.');
+          setLabs([]);
+          return [];
+        }
+        return r.json();
+      })
+      .then(setLabs)
+      .catch((e) => {
+        alert('Network error fetching lab reports.');
+        setLabs([]);
+      });
+  }, [pid]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // --- FIXED REMINDER MESSAGE SENDING ---
+  const sendReminderMessage = async (lab) => {
+    // Use DB field names for lab object
+    const testName = lab.testName || lab.TestName;
+    const testResult = lab.result || lab.TestResult;
+    const dateOfVisit = lab.dateOfVisit || lab.DateOfVisit;
+    const phoneNumber = lab.phoneNumber || lab.PhoneNumber;
+    const message = `Hello - ${patient ? patient.name : ''}, Lab Result Reminder: ${testName} result ${testResult}. Date of Visit: ${dateOfVisit ? new Date(dateOfVisit).toLocaleDateString('en-US') : ''}. Please consult your doctor for details.`;
+    // Debug log
+    console.log('Reminder debug:', { phoneNumber, message, lab });
+    try {
+      if (!phoneNumber || !message) throw new Error('Missing phone number or message');
+      await ReminderService.sendReminder(phoneNumber, message);
+    } catch (error) {
+      let errMsg = 'Failed to schedule lab reminder message.';
+      if (error && error.message) errMsg += `\n${error.message}`;
+      alert(errMsg);
+      console.error('Failed to schedule lab reminder:', error);
+    }
+  };
+
+  // --- ADD/EDIT LAB REPORT ---
+  const handleAdd = async () => {
+    if (!formData.testName || !formData.date || !formData.dateOfVisit || !formData.result || !formData.phoneNumber) return;
+    const phoneRegex = /^\+?[1-9]\d{9,14}$/;
+    if (!phoneRegex.test(formData.phoneNumber)) {
+      alert('Please enter a valid phone number in international format (e.g., +1234567890)');
+      return;
+    }
+    const doctorId = localStorage.getItem('doctorId');
+    const token = localStorage.getItem('token') || '';
+    const formatDate = (d) => {
+      if (!d) return null;
+      const dateObj = new Date(d);
+      if (isNaN(dateObj)) return d;
+      return dateObj.toISOString().split('T')[0];
+    };
+    const payload = {
+      PatientID: pid,
+      ReportDate: formatDate(formData.date),
+      TestName: formData.testName,
+      TestResult: formData.result,
+      ReferenceRange: formData.range,
+      Units: formData.units || '',
+      DoctorID: doctorId,
+      Notes: formData.notes,
+      CreatedAt: new Date().toISOString(),
+      UpdatedAt: new Date().toISOString(),
+      PhysiologicBasis: formData.physiologicBasis,
+      Interpretation: formData.interpretation,
+      Comments: formData.comments,
+      PhoneNumber: formData.phoneNumber,
+      DateOfVisit: formatDate(formData.dateOfVisit)
+    };
+    try {
+      let res;
+      if (isEditing && editLabId) {
+        // EDIT (PUT)
+        res = await fetch(`/api/labreports/${editLabId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        // ADD (POST)
+        res = await fetch('/api/labreports', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify(payload)
+        });
+      }
+      if (res.ok) {
+        await sendReminderMessage(payload);
+        // Refresh labs from DB
+        const getRes = await fetch(`/api/labreports/patient/${pid}?doctorId=${doctorId}`, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (getRes.ok) {
+          const updatedLabs = await getRes.json();
+          setLabs(updatedLabs);
+        }
+        resetForm();
+        setIsEditing(false);
+        setEditLabId(null);
+        alert('Lab report saved to database.');
+      } else {
+        let msg = 'Failed to save lab report to database.';
+        try { msg += '\n' + await res.text(); } catch {}
+        alert(msg);
+      }
+    } catch (e) {
+      alert('Error saving lab report: ' + e.message);
+    }
+  };
+
+  const getLogoDataUri = () => new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = '/logo.png'; // path relative to wwwroot
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const dataUri = canvas.toDataURL('image/png');
+        resolve(dataUri);
+      };
+      img.onerror = () => reject(new Error('Failed to load logo'));
+    });
+
+    const generatePdf = async (lab) => {
+    try {
+    const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    if (!jsPDFCtor) { alert('PDF library failed to load.'); return; }
+    const doc = new jsPDFCtor({ orientation:'p', unit:'pt', format:'a4' });
+    const margin = 40;
+    let logoBase64;
+      try {
+        logoBase64 = await getLogoDataUri();
+      } catch (e) {
+        console.warn('Logo image not found or failed to convert, continuing without logo');
+      }
+
+    // Header banner
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const headerHeight = 60;
+    doc.setFillColor(30,58,138); // dark blue
+    doc.rect(0,0,pageWidth,headerHeight,'F');
+    doc.setTextColor(255,255,255);
+    // logo
+      if (logoBase64) {
+        // Draw white rectangle background so the logo isn't tinted by header colour
+        doc.setFillColor(255,255,255);
+        doc.rect(margin - 10, 10, 60, 40, 'F');
+        doc.addImage(logoBase64, 'PNG', margin - 8, 12, 56, 36);
+      }
+    if (logoBase64 && logoBase64.startsWith('data:image')) {
+      try {
+        doc.addImage(logoBase64, 'PNG', margin, 10, 40, 40);
+      } catch(e){ console.warn('logo failed',e); }
+    }
+    
+    doc.setFont('times','bold');
+    doc.setFontSize(22);
+    doc.text('HealthCare', pageWidth/2, 35, { align:'center' });
+    // contact info right side
+    doc.setFont('times','normal');
+    doc.setFontSize(12);
+    doc.text('Address: 123 Health St, City', pageWidth - margin, 20, { align:'right' });
+    doc.text('Website: www.healthcare.com', pageWidth - margin, 35, { align:'right' });
+    doc.text('Phone: +1 234 567 890', pageWidth - margin, 50, { align:'right' });
+
+    // Title
+    doc.setTextColor(0,0,0);
+    doc.setFont('times','bold');
+    doc.setFontSize(26);
+    doc.text('Lab Result', pageWidth/2, headerHeight + 35, { align:'center' });
+
+    // Patient info
+    doc.setFont('times','bold');
+    doc.setFontSize(12);
+    const patientName = patient?.name || 'N/A';
+    const patientAge  = patient?.age ?? 'N/A';
+    const patientPhone = patient?.contact ?? 'N/A';
+    function formatDateSafe(dateStr) {
+      const d = new Date(dateStr);
+      return isNaN(d) ? '-' : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    const reportDate = formatDateSafe(lab.reportDate || lab.ReportDate || lab.date);
+    const visitDate = formatDateSafe(lab.dateOfVisit || lab.DateOfVisit);
+    const infoY = headerHeight + 60;
+    // Left-hand details
+    doc.text(`Name: ${patientName}`, margin, infoY);
+    doc.text(`Age: ${patientAge}`, margin, infoY + 15);
+    // Right-hand details
+    doc.text(`Contact: ${patientPhone}`, pageWidth - margin, infoY, { align: 'right' });
+    doc.text(`Report Date: ${reportDate}`, pageWidth - margin, infoY + 15, { align: 'right' });
+    doc.text(`Visit Date: ${visitDate}`, pageWidth - margin, infoY + 30, { align: 'right' });
+
+    // Table of results using autotable
+    const tableY = infoY + 75;
+    const autoTable = doc.autoTable;
+    const testName = lab.testName || lab.TestName || '';
+    const testResult = lab.result || lab.testResult || lab.TestResult || '';
+    const referenceRange = lab.range || lab.referenceRange || lab.ReferenceRange || '-';
+    if (autoTable) {
+        doc.autoTable({
+            startY: tableY,
+            head: [['Test', 'Result', 'Range']],
+            body: [[testName, testResult, referenceRange]],
+            styles: { halign: 'left', valign:'middle', fontSize: 11 },
+            headStyles:{ fillColor:[30,58,138], textColor:255, fontStyle:'bold' },
+            margin:{ left: margin, right: margin }
+        });
+    } else {
+        // fallback simple lines
+        doc.text('Test: ' + testName, margin, tableY);
+        doc.text('Result: ' + testResult, margin, tableY + 15);
+    }
+
+    // Notes if any
+    if(lab.notes){
+        const notesY = (doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : tableY + 40);
+        doc.setFont('times','bold');
+        doc.text('Notes:', margin, notesY);
+        doc.setFont('times','normal');
+        doc.text(doc.splitTextToSize(lab.notes, 500), margin, notesY + 15);
+
+    // Physiologic Basis
+    let yPos = notesY + 15 + (doc.splitTextToSize(lab.notes || '-', 500).length * 14) + 25;
+    doc.setFont('times','bold');
+    doc.text('Physiologic Basis:', margin, yPos);
+    doc.setFont('times','normal');
+    doc.text(doc.splitTextToSize(lab.physiologicBasis || '-', 500), margin, yPos + 15);
+
+    // Interpretation
+    yPos += 15 + (doc.splitTextToSize(lab.physiologicBasis || '-', 500).length * 14) + 25;
+    doc.setFont('times','bold');
+    doc.text('Interpretation:', margin, yPos);
+    doc.setFont('times','normal');
+    doc.text(doc.splitTextToSize(lab.interpretation || '-', 500), margin, yPos + 15);
+
+    // Comments
+    yPos += 15 + (doc.splitTextToSize(lab.interpretation || '-', 500).length * 14) + 25;
+    doc.setFont('times','bold');
+    doc.text('Comments:', margin, yPos);
+    doc.setFont('times','normal');
+    doc.text(doc.splitTextToSize(lab.comments || '-', 500), margin, yPos + 15);
+
+    // End of report text
+    yPos += 15 + (doc.splitTextToSize(lab.comments || '-', 500).length * 14) + 35;
+    doc.setFontSize(10);
+    doc.setFont('times','italic');
+    doc.text('End of report', pageWidth/2, yPos, { align: 'center' });
+
+    }
+
+    // Disclaimer at bottom
+    const disclaimer = `NOT VALID FOR MEDICO LEGAL PURPOSE\nWork timings: Monday to Sunday, 8 am to 8 pm\nPlease correlate clinically. Although the test results are checked thoroughly, in case of any unexpected test results which could be due to machine error or typing error or any other reason please contact the lab immediately for a free evaluation.`;
+    doc.setFontSize(9);
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const disclaimerLines = doc.splitTextToSize(disclaimer, pageWidth - 2*margin);
+    const disclaimerHeight = disclaimerLines.length * 12; // approx line height
+    const disclaimerStartY = pageHeight - margin - disclaimerHeight - 25; // leave room for footer
+    doc.text(disclaimerLines, pageWidth/2, disclaimerStartY, { align: 'center' });
+
+    // Footer text just below disclaimer
+    doc.setFontSize(10);
+    doc.setFont('times', 'italic');
+    doc.text('Generated by HealthCare Portal', pageWidth/2, pageHeight - margin, { align: 'center' });
+
+    const fileName = `${(patientName.replace(/\s+/g,'_') || 'patient')}_${lab.testName.replace(/\s+/g,'_')}.pdf`;
+    doc.save(fileName);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    alert('Failed to generate PDF. Please try again.');
+  }
+};
+
+   // --- EDIT LAB ---
+  const handleEdit = (lab) => {
+    setFormData({
+      id: lab.labReportID,
+      testName: lab.testName,
+      date: lab.reportDate ? lab.reportDate.split('T')[0] : '',
+      dateOfVisit: lab.dateOfVisit ? lab.dateOfVisit.split('T')[0] : '',
+      result: lab.testResult,
+      range: lab.referenceRange,
+      notes: lab.notes,
+      physiologicBasis: lab.physiologicBasis || '',
+      interpretation: lab.interpretation || '',
+      comments: lab.comments || '',
+      phoneNumber: lab.phoneNumber || '',
+    });
+    setIsEditing(true);
+    setEditLabId(lab.labReportID);
+  };
+
+  // --- DELETE LAB ---
+  const handleDelete = async (labId) => {
+    if (!window.confirm('Are you sure you want to delete this lab report?')) return;
+    const token = localStorage.getItem('token') || '';
+    const doctorId = localStorage.getItem('doctorId');
+    try {
+      const res = await fetch(`/api/labreports/${labId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.ok) {
+        // Refresh labs from DB
+        const getRes = await fetch(`/api/labreports/patient/${pid}?doctorId=${doctorId}`, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (getRes.ok) {
+          const updatedLabs = await getRes.json();
+          setLabs(updatedLabs);
+        }
+      } else {
+        alert('Failed to delete lab report.');
+      }
+    } catch (e) {
+      alert('Error deleting lab report: ' + e.message);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      id: null,
+      testName: '',
+      date: '',
+      dateOfVisit: '',
+      result: '',
+      range: '',
+      notes: '',
+      physiologicBasis: '',
+      interpretation: '',
+      comments: '',
+      phoneNumber: '',
+    });
+    setIsEditing(false);
+    setEditLabId(null);
+  };
+
+  return React.createElement(
+    'div',
+    { className: 'min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8' },
+    React.createElement(
+      'div',
+      { className: 'max-w-4xl w-full bg-white shadow-xl rounded-2xl p-10' },
+      React.createElement(
+        'header',
+        { className: 'text-center mb-10' },
+        React.createElement(
+          'h1',
+          { className: 'text-3xl font-extrabold text-gray-900 tracking-tight' },
+          `Lab Results - ${patient ? patient.name : ''}`
+        ),
+        React.createElement(
+          'p',
+          { className: 'text-sm text-gray-500 mt-2' },
+          'Last Updated: ' + new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
+        )
+      ),
+      React.createElement(
+        'section',
+        { className: 'mb-8' },
+        React.createElement(
+          'h2',
+          { className: 'text-xl font-semibold text-gray-800 mb-6 border-b border-gray-200 pb-2' },
+          isEditing ? 'Edit Lab Result' : 'Add New Lab Result'
+        ),
+        React.createElement(
+          'div',
+          { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Test Name'
+            ),
+            React.createElement('input', {
+              type: 'text',
+              name: 'testName',
+              value: formData.testName,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              placeholder: 'e.g., Blood Glucose'
+            })
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Date of Report'
+            ),
+            React.createElement('input', {
+              type: 'date',
+              name: 'date',
+              value: formData.date,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out'
+            })
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Date of Visit'
+            ),
+            React.createElement('input', {
+              type: 'date',
+              name: 'dateOfVisit',
+              value: formData.dateOfVisit,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out'
+            })
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Result'
+            ),
+            React.createElement('input', {
+              type: 'text',
+              name: 'result',
+              value: formData.result,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              placeholder: 'e.g., 120 mg/dL'
+            })
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Range'
+            ),
+            React.createElement('input', {
+              type: 'text',
+              name: 'range',
+              value: formData.range,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              placeholder: 'e.g., 70-110 mg/dL'
+            })
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Patient Phone Number'
+            ),
+            React.createElement('input', {
+              type: 'tel',
+              name: 'phoneNumber',
+              value: formData.phoneNumber,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              placeholder: 'e.g., +919876543210'
+            })
+          ),
+          React.createElement(
+            'div',
+            { className: 'md:col-span-2' },
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Notes'
+            ),
+            React.createElement('textarea', {
+              name: 'notes',
+              value: formData.notes,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              rows: 4,
+              placeholder: 'e.g., Fasting sample'
+            })
+          ),
+          React.createElement(
+            'div',
+            { className: 'md:col-span-2' },
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Physiologic Basis'
+            ),
+            React.createElement('textarea', {
+              name: 'physiologicBasis',
+              value: formData.physiologicBasis,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              rows: 3,
+              placeholder: 'Describe the physiologic basis'
+            })
+          ),
+          React.createElement(
+            'div',
+            { className: 'md:col-span-2' },
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Interpretation'
+            ),
+            React.createElement('textarea', {
+              name: 'interpretation',
+              value: formData.interpretation,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              rows: 3,
+              placeholder: 'Interpretation of the result'
+            })
+          ),
+          React.createElement(
+            'div',
+            { className: 'md:col-span-2' },
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Comments'
+            ),
+            React.createElement('textarea', {
+              name: 'comments',
+              value: formData.comments,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              rows: 3,
+              placeholder: 'Additional comments'
+            })
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-6 flex justify-end space-x-4' },
+          React.createElement(
+            'button',
+            {
+              onClick: isEditing ? handleAdd : handleAdd,
+              className: 'bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-200 ease-in-out transform hover:-translate-y-1'
+            },
+            isEditing ? 'Save' : 'Add Lab Result'
+          ),
+          (formData.testName || formData.date || formData.result || formData.notes || formData.physiologicBasis || formData.interpretation || formData.comments || formData.phoneNumber) && React.createElement(
+            'button',
+            {
+              onClick: resetForm,
+              className: 'bg-gray-500 text-white font-semibold py-3 px-6 rounded-lg hover:bg-gray-600 transition duration-200 ease-in-out transform hover:-translate-y-1'
+            },
+            'Clear'
+          )
+        )
+      ),
+      React.createElement(
+        'section',
+        null,
+        React.createElement(
+          'h2',
+          { className: 'text-xl font-semibold text-gray-800 mb-6 border-b border-gray-200 pb-2' },
+          'Lab Results List'
+        ),
+        labs.length === 0
+          ? React.createElement(
+              'p',
+              { className: 'text-gray-500 text-sm text-center' },
+              'No lab results have been added yet.'
+            )
+          : React.createElement(
+              'div',
+              { className: 'overflow-x-auto' },
+              React.createElement(
+                'div',
+                { className: 'min-w-full space-y-2' },
+                React.createElement(
+                  'div',
+                  { className: 'grid grid-cols-7 gap-4 font-semibold text-gray-800 bg-gray-200 rounded-t-md text-sm' },
+                  React.createElement('span', { className: 'px-2 py-1' }, 'Test'),
+                  React.createElement('span', { className: 'px-2 py-1' }, 'Report Date'),
+                  React.createElement('span', { className: 'px-2 py-1' }, 'Visit Date'),
+                  React.createElement('span', { className: 'px-2 py-1' }, 'Result'),
+                  React.createElement('span', { className: 'px-2 py-1' }, 'Phone'),
+                  React.createElement('span', { className: 'px-2 py-1' }, 'Notes'),
+                  React.createElement('span', { className: 'px-2 py-1' }, 'Actions')
+                ),
+                labs.map((lab) => React.createElement(
+                  'div',
+                  { key: lab.labReportID, className: 'grid grid-cols-7 gap-4 bg-gray-50 px-2 py-3 items-center rounded-md text-sm hover:bg-gray-100' },
+                  React.createElement('span', { className: 'px-2 font-medium text-gray-900 truncate' }, lab.testName),
+                  React.createElement('span', { className: 'px-2 truncate' }, new Date(lab.reportDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })),
+                  React.createElement('span', { className: 'px-2 truncate' }, lab.dateOfVisit ? new Date(lab.dateOfVisit).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'),
+                  React.createElement('span', { className: 'px-2 truncate' }, lab.testResult),
+                  React.createElement('span', { className: 'px-2 truncate' }, lab.phoneNumber || '-'),
+                  React.createElement('span', { className: 'text-gray-500 truncate' }, lab.notes || '-'),
+                  React.createElement(
+                    'div',
+                    { className: 'flex space-x-2 px-2' },
+                    React.createElement(
+                      'button',
+                      {
+                        onClick: () => handleEdit(lab),
+                        className: 'text-indigo-600 hover:text-indigo-800 font-medium'
+                      },
+                      'Edit'
+                    ),
+                    React.createElement(
+                      'button',
+                      {
+                        onClick: () => generatePdf(lab),
+                        className: 'text-green-600 hover:text-green-800 font-medium'
+                      },
+                      'Download PDF'
+                    ),
+                    React.createElement(
+                      'button',
+                      {
+                        onClick: () => handleDelete(lab.labReportID),
+                        className: 'text-red-600 hover:text-red-800 font-medium'
+                      },
+                      'Delete'
+                    )
+                  )
+                ))
+              )
+            )
+      ),
+      React.createElement(
+        'div',
+        { className: 'mt-12 flex justify-center' },
+        React.createElement(
+          'a',
+          {
+            href: 'dashboard.html?pid=' + (pid || localStorage.getItem('currentPid') || ''),
+            className: 'inline-block bg-gray-500 text-white font-semibold py-3 px-6 rounded-lg hover:bg-gray-600 transition duration-200 ease-in-out transform hover:-translate-y-1'
+          },
+          'Return to Dashboard'
+        )
+      )
+    )
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(LabResults));
+</script>
+</body>
+</html>

@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Summary</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .card {
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .btn-primary {
+            background-color: #4f46e5;
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca;
+        }
+        .btn-secondary {
+            background-color: #6b7280;
+            transition: background-color 0.2s;
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+        .btn-danger {
+            background-color: #ef4444;
+            transition: background-color 0.2s;
+        }
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+        [x-cloak] { display: none !important; }
+        .modal-overlay {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+        }
+        .modal-container {
+            transform: translateY(-20px);
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            opacity: 0;
+        }
+        .modal-container.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-50" x-data="medicalSummaryPage()" x-init="init()">
+    <header class="header text-white py-4">
+        <div class="container mx-auto px-6 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">Medical Summary</h1>
+            <nav>
+                <button @click="window.location='dashboard.html?pid='+pid" class="text-white hover:text-gray-200">Back to Dashboard</button>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-6 py-8">
+        <div class="bg-white rounded-lg shadow p-6 mb-6 card">
+            <!-- Patient Information -->
+            <div class="mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <p class="text-gray-600">Patient Name:</p>
+                        <p class="font-medium" x-text="patient?.name || 'N/A'"></p>
+                    </div>
+                    <div>
+                        <p class="text-gray-600">Age:</p>
+                        <p class="font-medium" x-text="patient?.age || 'N/A'"></p>
+                    </div>
+                    <div>
+                        <p class="text-gray-600">Gender:</p>
+                        <p class="font-medium" x-text="patient?.gender || 'N/A'"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chief Complaint -->
+            <div class="mb-6">
+                <div class="section-header">
+                    <h3 class="text-lg font-semibold">Chief Complaint</h3>
+                </div>
+                <div class="mt-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Main Complaint</label>
+                            <input type="text" x-model="summary.chiefComplaint" class="w-full p-2 border rounded-md">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                            <input type="text" x-model="summary.duration" class="w-full p-2 border rounded-md">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History of Present Illness -->
+            <div class="mb-6">
+                <div class="section-header">
+                    <h3 class="text-lg font-semibold">History of Present Illness</h3>
+                </div>
+                <div class="mt-4">
+                    <textarea x-model="summary.historyOfPresentIllness" class="w-full p-2 border rounded-md" rows="3"></textarea>
+                </div>
+            </div>
+
+            <!-- Past Medical History -->
+            <div class="mb-6">
+                <div class="section-header">
+                    <h3 class="text-lg font-semibold">Past Medical History</h3>
+                    <button @click="addNewHistory" class="btn-primary text-white px-4 py-1 rounded-md text-sm">Add New Entry</button>
+                </div>
+                
+                <!-- History Entries List -->
+                <div class="mt-4">
+                    <div class="space-y-4" x-show="historyEntries.length > 0">
+                        <template x-for="(entry, index) in historyEntries" :key="index">
+                            <div class="border rounded-lg p-4">
+                                <div class="flex justify-between items-center mb-2">
+                                    <div>
+                                        <span class="font-semibold">Visit Date:</span> <span x-text="new Date(entry.visitDate).toLocaleDateString()"></span>
+                                        <!-- Debug: Show entry object for troubleshooting -->
+                                        <span style="display:none" x-text="JSON.stringify(entry)"></span>
+                                    </div>
+                                    <div class="flex space-x-4">
+                                        <!-- Use entry.id (camelCase) everywhere -->
+                                        <button @click="viewHistoryEntry(entry.id)" class="text-blue-500 hover:text-blue-700">View Details</button>
+                                        <button @click="deleteHistoryEntry(entry.id)" class="text-red-500 hover:text-red-700">Delete</button>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <div x-show="entry.hasDiabetes" class="text-green-600">• Diabetes</div>
+                                    <div x-show="entry.hasHypertension" class="text-green-600">• Hypertension</div>
+                                    <div x-show="entry.hasAsthma" class="text-green-600">• Asthma</div>
+                                </div>
+                                <div x-show="entry.pastMedicalHistory" class="mt-2">
+                                    <span class="font-semibold">Other Conditions:</span> <span x-text="entry.pastMedicalHistory"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <div x-show="historyEntries.length === 0" class="text-gray-500 text-center py-4">No medical history entries found.</div>
+                </div>
+
+                <!-- New Entry Form -->
+                <div class="mt-4" x-show="showNewEntryForm">
+                    <div class="mt-4 mb-4">
+                        <label class="block text-gray-700 mb-2">Visit Date</label>
+                        <input type="date" class="w-full border rounded p-2" x-model="newEntry.visitDate">
+                    </div>
+                    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" class="form-checkbox" x-model="newEntry.hasDiabetes">
+                            <span>Diabetes</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" class="form-checkbox" x-model="newEntry.hasHypertension">
+                            <span>Hypertension</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" class="form-checkbox" x-model="newEntry.hasAsthma">
+                            <span>Asthma</span>
+                        </label>
+                    </div>
+                    <div class="mt-4">
+                        <label class="block text-gray-700 mb-2">Other Conditions</label>
+                        <textarea class="w-full border rounded p-2" rows="3" x-model="newEntry.pastMedicalHistory"></textarea>
+                    </div>
+                    <div class="mt-4 flex justify-end space-x-2">
+                        <button @click="cancelNewEntry" class="btn-secondary">Cancel</button>
+                        <button @click="saveNewEntry" class="btn-primary">Save Entry</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Family History -->
+            <div class="mb-6">
+                <div class="section-header">
+                    <h3 class="text-lg font-semibold">Family History</h3>
+                </div>
+                <div class="mt-4">
+                    <textarea x-model="summary.familyHistory" class="w-full p-2 border rounded-md" rows="3"></textarea>
+                </div>
+            </div>
+
+            <!-- Social History -->
+            <div class="mb-6">
+                <div class="section-header">
+                    <h3 class="text-lg font-semibold">Social History</h3>
+                </div>
+                <div class="mt-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Occupation</label>
+                            <input type="text" x-model="summary.occupation" class="w-full p-2 border rounded-md">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Smoking</label>
+                            <select x-model="summary.smokingStatus" class="w-full p-2 border rounded-md">
+                                <option value="">Select</option>
+                                <option value="never">Never</option>
+                                <option value="current">Current</option>
+                                <option value="former">Former</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Allergies -->
+            <div class="mb-6">
+                <div class="section-header">
+                    <h3 class="text-lg font-semibold">Allergies</h3>
+                </div>
+                <div class="mt-4">
+                    <textarea x-model="summary.allergies" class="w-full p-2 border rounded-md" rows="3"></textarea>
+                </div>
+            </div>
+
+            <!-- Vital Signs -->
+            <div class="mb-6">
+                <div class="section-header">
+                    <h3 class="text-lg font-semibold">Vital Signs</h3>
+                </div>
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">BP</label>
+                        <input type="text" x-model="summary.bp" class="w-full p-2 border rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Pulse</label>
+                        <input type="text" x-model="summary.pulse" class="w-full p-2 border rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">RR</label>
+                        <input type="text" x-model="summary.rr" class="w-full p-2 border rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Temp</label>
+                        <input type="text" x-model="summary.temp" class="w-full p-2 border rounded-md">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="flex justify-end">
+                <button @click="saveSummary()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    Save Summary
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Medical History Modal (moved inside x-data scope) -->
+    <div x-show="selectedEntry && typeof selectedEntry === 'object'" 
+         x-cloak 
+         @click.self="closeModal"
+         class="fixed inset-0 bg-black/50 overflow-y-auto z-50 transition-opacity duration-300"
+         :class="{'opacity-0 pointer-events-none': !selectedEntry, 'opacity-100': selectedEntry}">
+        <div class="min-h-screen flex items-center justify-center p-4 sm:p-6">
+            <template x-if="selectedEntry && typeof selectedEntry === 'object'">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+                 @click.stop
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95">
+                
+                <!-- Modal Header -->
+                <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 z-10">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xl font-semibold text-gray-900">Medical History Details</h3>
+                        <button @click="closeModal" class="text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md">
+                            <span class="sr-only">Close</span>
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Modal Body -->
+                <div class="p-6 space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Doctor Information -->
+                        <div class="space-y-4">
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <h4 class="text-base font-medium text-gray-700 mb-3 pb-2 border-b border-gray-200">Doctor Information</h4>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Doctor Name</label>
+                                        <input type="text" x-model="selectedEntry.doctorName" 
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Specialization</label>
+                                        <input type="text" x-model="selectedEntry.specialization" 
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Visit Information -->
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <h4 class="text-base font-medium text-gray-700 mb-3 pb-2 border-b border-gray-200">Visit Information</h4>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Visit Date</label>
+                                        <input type="date" x-model="selectedEntry.visitDate" 
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Visit Time</label>
+                                        <input type="time" x-model="selectedEntry.visitTime" 
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chief Complaint -->
+                    <div class="bg-white border border-gray-200 rounded-lg p-5">
+                        <h4 class="text-base font-medium text-gray-700 mb-3 pb-2 border-b border-gray-200">Chief Complaint</h4>
+                        <textarea x-model="selectedEntry.chiefComplaint" 
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
+                                  rows="3"
+                                  placeholder="Enter chief complaint details..."></textarea>
+                    </div>
+
+                    <!-- Doctor's Assessment -->
+                    <div class="bg-white border border-gray-200 rounded-lg p-5">
+                        <h4 class="text-base font-medium text-gray-700 mb-3 pb-2 border-b border-gray-200">Doctor's Assessment</h4>
+                        <textarea x-model="selectedEntry.doctorNotes" 
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
+                                  rows="4"
+                                  placeholder="Enter doctor's assessment..."></textarea>
+                    </div>
+
+                    <!-- Prescription -->
+                    <div class="bg-white border border-gray-200 rounded-lg p-5">
+                        <div class="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
+                            <h4 class="text-base font-medium text-gray-700">Prescription</h4>
+                            <button @click="addMedication" type="button" 
+                                    class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                <svg class="-ml-0.5 mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                Add Medication
+                            </button>
+                        </div>
+                        
+                        <div class="space-y-3 mt-4">
+                            <template x-for="(medication, index) in selectedEntry.medications" :key="index">
+                                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                                    <div class="md:col-span-5">
+                                        <label class="sr-only">Medication Name</label>
+                                        <input type="text" x-model="medication.name" 
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
+                                               placeholder="Medication name">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="sr-only">Dosage</label>
+                                        <input type="text" x-model="medication.dosage" 
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
+                                               placeholder="Dosage">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="sr-only">Duration</label>
+                                        <input type="text" x-model="medication.duration" 
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
+                                               placeholder="Duration">
+                                    </div>
+                                    <div class="md:col-span-1 flex justify-end">
+                                        <button type="button" @click="removeMedication(index)" 
+                                                class="text-red-500 hover:text-red-700 focus:outline-none">
+                                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Follow-up Information -->
+                    <div class="bg-white border border-gray-200 rounded-lg p-5">
+                        <h4 class="text-base font-medium text-gray-700 mb-3 pb-2 border-b border-gray-200">Follow-up Information</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Next Visit Date</label>
+                                <input type="date" x-model="selectedEntry.nextVisitDate" 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Special Instructions</label>
+                                <textarea x-model="selectedEntry.specialInstructions" 
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
+                                          rows="2"
+                                          placeholder="Any special instructions..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                        <button type="button" @click="closeModal" 
+                                class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Cancel
+                        </button>
+                        <button type="button" @click="saveHistoryEntry" 
+                                class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+            </template>
+        </div>
+    </div>
+
+    <script>
+        function to24Hour(timeStr) {
+            if (!timeStr) return '';
+            if (/^\d{2}:\d{2}$/.test(timeStr)) return timeStr;
+            // Convert "04:17 PM" to "16:17"
+            const d = new Date('1970-01-01T' + timeStr);
+            if (!isNaN(d)) {
+                return d.toTimeString().slice(0,5);
+            }
+            return '';
+        }
+        // Helper to map backend PascalCase to camelCase for modal
+        function mapEntryToCamelCase(entry) {
+            return {
+                id: entry.id || entry.Id || null,
+                doctorName: entry.doctorName || entry.DoctorName || '',
+                specialization: entry.specialization || entry.Specialization || '',
+                visitDate: entry.visitDate || entry.VisitDate ? (typeof (entry.visitDate || entry.VisitDate) === 'string' ? (entry.visitDate || entry.VisitDate).split('T')[0] : (entry.visitDate || entry.VisitDate)) : new Date().toISOString().split('T')[0],
+                visitTime: to24Hour(entry.visitTime || entry.VisitTime),
+                chiefComplaint: entry.chiefComplaint || entry.ChiefComplaint || '',
+                doctorNotes: entry.doctorNotes || entry.DoctorNotes || '',
+                medications: Array.isArray(entry.medications || entry.Medications) ? (entry.medications || entry.Medications) : [{ name: '', dosage: '', duration: '' }],
+                nextVisitDate: entry.nextVisitDate || entry.NextVisitDate || '',
+                specialInstructions: entry.specialInstructions || entry.SpecialInstructions || ''
+            };
+        }
+        function medicalSummaryPage() {
+            return {
+                pid: null,
+                patient: null,
+                summary: {
+                    chiefComplaint: '',
+                    historyOfPresentIllness: '',
+                    pastMedicalHistory: '',
+                    familyHistory: '',
+                    socialHistory: '',
+                    allergies: '',
+                    vitalSigns: '',
+                    smokingStatus: '',
+                    occupation: '',
+                    bp: '',
+                    pulse: '',
+                    rr: '',
+                    temp: '',
+                    duration: '',
+                    visitDate: new Date().toISOString().split('T')[0] // Default to today's date
+                },
+                historyEntries: [],
+                newEntry: {
+                    visitDate: new Date().toISOString().split('T')[0],
+                    pastMedicalHistory: ''
+                },
+                showNewEntryForm: false,
+                selectedEntry: null,
+
+                async init() {
+                    let id = new URLSearchParams(window.location.search).get('pid');
+                    if (!id) {
+                        id = localStorage.getItem('currentPid');
+                    }
+                    if (!id) return;
+                    
+                    this.pid = id;
+                    localStorage.setItem('currentPid', id);
+                    await this.loadPatient();
+                    await this.loadSummary();
+                    await this.loadHistoryEntries();
+                    await this.loadLatestVitals();
+                },
+
+                async loadLatestVitals() {
+                    try {
+                        // Get vitals from localStorage
+                        const savedVitals = localStorage.getItem(`vitals-${this.pid}`);
+                        if (!savedVitals) return;
+                        
+                        const vitals = JSON.parse(savedVitals);
+                        if (!vitals || !vitals.length) return;
+                        
+                        // Get the latest vitals
+                        const latestVitals = {};
+                        vitals.forEach(vital => {
+                            if (!latestVitals[vital.type] || new Date(vital.date) > new Date(latestVitals[vital.type].date)) {
+                                latestVitals[vital.type] = vital;
+                            }
+                        });
+                        
+                        // Update the summary with the latest vitals
+                        if (latestVitals['Blood Pressure']) {
+                            this.summary.bp = latestVitals['Blood Pressure'].value + (latestVitals['Blood Pressure'].unit ? ' ' + latestVitals['Blood Pressure'].unit : '');
+                        }
+                        if (latestVitals['Heart Rate']) {
+                            this.summary.pulse = latestVitals['Heart Rate'].value + (latestVitals['Heart Rate'].unit ? ' ' + latestVitals['Heart Rate'].unit : '');
+                        }
+                        if (latestVitals['Temperature']) {
+                            this.summary.temp = latestVitals['Temperature'].value + (latestVitals['Temperature'].unit ? ' ' + latestVitals['Temperature'].unit : '');
+                        }
+                        if (latestVitals['Respiratory Rate']) {
+                            this.summary.rr = latestVitals['Respiratory Rate'].value + (latestVitals['Respiratory Rate'].unit ? ' ' + latestVitals['Respiratory Rate'].unit : '');
+                        }
+                    } catch (error) {
+                        console.error('Error loading vitals:', error);
+                    }
+                },
+
+                async loadPatient() {
+                    try {
+                        const response = await fetch(`/api/patients/${this.pid}`);
+                        if (!response.ok) throw new Error('Failed to load patient');
+                        this.patient = await response.json();
+                    } catch (error) {
+                        console.error('Error loading patient:', error);
+                        this.patient = null;
+                    }
+                },
+
+                async loadSummary() {
+                    try {
+                        const response = await fetch(`/api/patients/${this.pid}/medical-summaries/latest`);
+                        if (response.ok) {
+                            const latestSummary = await response.json();
+                            Object.assign(this.summary, latestSummary);
+                        }
+                    } catch (error) {
+                        console.error('Error loading summary:', error);
+                    }
+                },
+
+                async loadHistoryEntries() {
+                    try {
+                        const response = await fetch(`/api/patients/${this.pid}/medical-summaries`);
+                        if (response.ok) {
+                            const entries = await response.json();
+                            this.historyEntries = entries;
+                        }
+                    } catch (error) {
+                        console.error('Error loading history entries:', error);
+                    }
+                },
+
+                addNewHistory() {
+                    this.selectedEntry = {
+                        id: null,
+                        doctorName: '',
+                        specialization: '',
+                        visitDate: new Date().toISOString().split('T')[0],
+                        visitTime: to24Hour(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })),
+                        chiefComplaint: '',
+                        doctorNotes: '',
+                        medications: [{ name: '', dosage: '', duration: '' }],
+                        nextVisitDate: '',
+                        specialInstructions: ''
+                    };
+                },
+
+                async viewHistoryEntry(id) {
+                    try {
+                        if (!id) {
+                            console.error('Invalid entry ID passed to viewHistoryEntry:', id);
+                            return;
+                        }
+                        const response = await fetch(`/api/patients/${this.pid}/medical-summaries/${id}`);
+                        if (!response.ok) throw new Error('Not found');
+                        const entry = await response.json();
+                        // Use helper to map to camelCase for modal
+                        this.selectedEntry = mapEntryToCamelCase(entry);
+                    } catch (e) {
+                        alert('Could not load entry details.');
+                        this.selectedEntry = null;
+                        console.error('Error in viewHistoryEntry:', e);
+                    }
+                },
+
+                closeModal() {
+                    console.log('Closing modal');
+                    this.selectedEntry = null;
+                },
+
+                addMedication() {
+                    if (!this.selectedEntry) return;
+                    if (!Array.isArray(this.selectedEntry.medications)) {
+                        this.selectedEntry.medications = [];
+                    }
+                    // Use re-assignment for Alpine.js v2 reactivity
+                    this.selectedEntry.medications = [
+                        ...this.selectedEntry.medications,
+                        { name: '', dosage: '', duration: '' }
+                    ];
+                },
+
+                removeMedication(index) {
+                    if (!this.selectedEntry || !Array.isArray(this.selectedEntry.medications)) return;
+                    // Use re-assignment for Alpine.js v2 reactivity
+                    this.selectedEntry.medications = this.selectedEntry.medications.filter((_, i) => i !== index);
+                },
+
+                async saveHistoryEntry() {
+                    if (!this.selectedEntry) {
+                        console.error('No selected entry to save');
+                        return;
+                    }
+                    try {
+                        let medications = [];
+                        if (Array.isArray(this.selectedEntry.medications)) {
+                            medications = this.selectedEntry.medications
+                                .filter(m => m && (m.name || m.dosage || m.duration))
+                                .map(m => ({
+                                    name: m.name || '',
+                                    dosage: m.dosage || '',
+                                    duration: m.duration || ''
+                                }));
+                        }
+                        if (medications.length === 0) {
+                            medications = [{ name: '', dosage: '', duration: '' }];
+                        }
+                        const url = this.selectedEntry.id 
+                            ? `/api/patients/${this.pid}/medical-summaries/${this.selectedEntry.id}`
+                            : `/api/patients/${this.pid}/medical-summaries`;
+                        const method = this.selectedEntry.id ? 'PUT' : 'POST';
+                        const requestBody = {
+                            ChiefComplaint: this.selectedEntry.chiefComplaint || '',
+                            DoctorName: this.selectedEntry.doctorName || '',
+                            Specialization: this.selectedEntry.specialization || '',
+                            VisitDate: this.selectedEntry.visitDate || new Date().toISOString().split('T')[0],
+                            VisitTime: this.selectedEntry.visitTime || '',
+                            DoctorNotes: this.selectedEntry.doctorNotes || '',
+                            Medications: medications.length > 0 ? medications : null,
+                            NextVisitDate: this.selectedEntry.nextVisitDate || '',
+                            SpecialInstructions: this.selectedEntry.specialInstructions || ''
+                        };
+                        const response = await fetch(url, {
+                            method,
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        const responseText = await response.text();
+                        if (!response.ok) {
+                            throw new Error(responseText || 'Failed to save medical history entry');
+                        }
+                        // If POST, get the new ID and reload entries, then open the modal for the new entry
+                        if (method === 'POST') {
+                            let newId = null;
+                            try {
+                                const parsed = JSON.parse(responseText);
+                                newId = parsed.id || parsed.Id;
+                            } catch {}
+                            await this.loadHistoryEntries();
+                            if (newId) {
+                                await this.viewHistoryEntry(newId);
+                            } else {
+                                this.closeModal();
+                            }
+                        } else {
+                            await this.loadHistoryEntries();
+                            this.closeModal();
+                        }
+                        alert('Medical history saved successfully!');
+                        // Trigger dashboard update in other tabs and redirect
+                        localStorage.setItem('visitCountUpdated', Date.now());
+                        window.location = 'doctor.html';
+                    } catch (error) {
+                        console.error('Error in saveHistoryEntry:', error);
+                        alert('Error saving medical history: ' + (error.message || 'Unknown error occurred'));
+                    }
+                },
+
+                async deleteHistoryEntry(id) {
+                    if (!confirm('Are you sure you want to delete this history entry?')) return;
+                    
+                    try {
+                        const response = await fetch(`/api/patients/${this.pid}/medical-summaries/${id}/delete`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            const error = await response.text();
+                            throw new Error(error || 'Failed to delete history entry');
+                        }
+                        
+                        // Refresh the history entries list
+                        await this.loadHistoryEntries();
+                        alert('History entry deleted successfully');
+                    } catch (error) {
+                        console.error('Error deleting history entry:', error);
+                        alert('Error deleting history entry: ' + (error.message || 'Unknown error occurred'));
+                    }
+                },
+
+                async saveSummary() {
+                    try {
+                        // Format vital signs for display
+                        const vitalSigns = [];
+                        if (this.summary.bp) vitalSigns.push(`BP: ${this.summary.bp}`);
+                        if (this.summary.pulse) vitalSigns.push(`Pulse: ${this.summary.pulse}`);
+                        if (this.summary.rr) vitalSigns.push(`RR: ${this.summary.rr}`);
+                        if (this.summary.temp) vitalSigns.push(`Temp: ${this.summary.temp}`);
+                        
+                        const response = await fetch(`/api/patients/${this.pid}/medical-summaries`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                chiefComplaint: this.summary.chiefComplaint || '',
+                                historyOfPresentIllness: this.summary.historyOfPresentIllness || '',
+                                pastMedicalHistory: this.summary.pastMedicalHistory || '',
+                                familyHistory: this.summary.familyHistory || '',
+                                socialHistory: this.summary.socialHistory || '',
+                                allergies: this.summary.allergies || '',
+                                vitalSigns: vitalSigns.join(', '),
+                                visitDate: this.summary.visitDate || new Date().toISOString().split('T')[0],
+                                // Include individual vital signs for better data handling
+                                bp: this.summary.bp || '',
+                                pulse: this.summary.pulse || '',
+                                rr: this.summary.rr || '',
+                                temp: this.summary.temp || ''
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            const error = await response.text();
+                            throw new Error(error || 'Failed to save summary');
+                        }
+                        
+                        alert('Summary saved successfully');
+                        // Refresh the history entries list after saving
+                        await this.loadHistoryEntries();
+                        // Trigger dashboard update in other tabs and redirect
+                        localStorage.setItem('visitCountUpdated', Date.now());
+                        window.location = 'doctor.html';
+                    } catch (error) {
+                        console.error('Error saving summary:', error);
+                        alert('Error saving summary: ' + (error.message || 'Unknown error occurred'));
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@2.8.2/dist/alpine.min.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patient Demographics</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script>
+    const { useState, useEffect } = React;
+
+    function DemographicsForm() {
+      const pid = new URLSearchParams(window.location.search).get('pid');
+      const [formData, setFormData] = useState({
+        name: '',
+        dob: '',
+        gender: '',
+        maritalStatus: '',
+        address: '',
+        phone: '',
+        email: '',
+        emergencyContact: '',
+      });
+      const [loading, setLoading] = useState(true);
+      const [isEditing, setIsEditing] = useState(false);
+
+      useEffect(() => {
+        if (!pid) { setLoading(false); return; }
+        fetch(`/api/patients/${pid}`)
+          .then(r => r.ok ? r.json() : Promise.reject('not found'))
+          .then(p => {
+            setFormData(prev => ({
+              ...prev,
+              name: p.name,
+              phone: p.contact ?? prev.phone,
+              gender: p.gender ?? prev.gender,
+              
+              gender: p.gender ?? '',
+            }));
+            document.title = `Patient Demographics - ${p.name}`;
+          })
+          .catch(console.error)
+          .finally(() => setLoading(false));
+      }, [pid]);
+
+      // persist edits locally
+      useEffect(() => {
+        if (isEditing) {
+          localStorage.setItem('patientDemographics', JSON.stringify(formData));
+        }
+      }, [formData, isEditing]);
+
+
+      const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData((prev) => ({ ...prev, [name]: value }));
+      };
+
+      const toggleEdit = () => {
+        setIsEditing(!isEditing);
+      };
+
+      const handleSave = () => {
+        fetch(`/api/patients/${pid}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+            name: formData.name,
+            age: calculateAge(formData.dob) || null,
+            gender: formData.gender || null,
+            contact: formData.phone || null,
+            note: null
+        })}).then(r=>{
+            if(!r.ok) throw new Error('save failed');
+            setIsEditing(false);
+        }).catch(alert);
+        localStorage.setItem('patientDemographics', JSON.stringify(formData));
+        setIsEditing(false);
+      };
+
+      const calculateAge = (dob) => {
+        if (!dob) return '';
+        const birthDate = new Date(dob);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+        return age;
+      };
+
+      if (loading) return React.createElement('div', { className: 'text-center mt-20' }, 'Loading...');
+      return React.createElement(
+        'div',
+        { className: 'min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8' },
+        React.createElement(
+          'div',
+          { className: 'max-w-4xl w-full bg-white shadow-xl rounded-2xl p-10' },
+          React.createElement(
+            'header',
+            { className: 'text-center mb-10' },
+            React.createElement(
+              'h1',
+              { className: 'text-3xl font-extrabold text-gray-900 tracking-tight' },
+              `Patient Demographics - ${formData.name || ''}`
+            ),
+            React.createElement(
+              'p',
+              { className: 'text-sm text-gray-500 mt-2' },
+              'Last Updated: ' + new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
+            )
+          ),
+          React.createElement(
+            'div',
+            { className: 'grid grid-cols-1 lg:grid-cols-2 gap-12' },
+            React.createElement(
+              'section',
+              null,
+              React.createElement(
+                'h2',
+                { className: 'text-xl font-semibold text-gray-800 mb-6 border-b border-gray-200 pb-2' },
+                'Personal Information'
+              ),
+              React.createElement(
+                'div',
+                { className: 'space-y-6' },
+                React.createElement(
+                  'div',
+                  null,
+                  React.createElement(
+                    'label',
+                    { className: 'block text-sm font-medium text-gray-700' },
+                    'Name'
+                  ),
+                  React.createElement('input', {
+                    type: 'text',
+                    name: 'name',
+                    value: formData.name,
+                    onChange: handleChange,
+                    disabled: !isEditing,
+                    className: `mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ${!isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`
+                  })
+                ),
+                React.createElement(
+                  'div',
+                  null,
+                  React.createElement(
+                    'label',
+                    { className: 'block text-sm font-medium text-gray-700' },
+                    'Date of Birth'
+                  ),
+                  React.createElement('input', {
+                    type: 'date',
+                    name: 'dob',
+                    value: formData.dob,
+                    onChange: handleChange,
+                    disabled: !isEditing,
+                    className: `mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ${!isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`
+                  })
+                ),
+                React.createElement(
+                  'div',
+                  null,
+                  React.createElement(
+                    'label',
+                    { className: 'block text-sm font-medium text-gray-700' },
+                    'Age'
+                  ),
+                  React.createElement('input', {
+                    type: 'text',
+                    value: calculateAge(formData.dob),
+                    disabled: true,
+                    className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm bg-gray-100 cursor-not-allowed'
+                  })
+                ),
+                React.createElement(
+                  'div',
+                  null,
+                  React.createElement(
+                    'label',
+                    { className: 'block text-sm font-medium text-gray-700' },
+                    'Gender'
+                  ),
+                  React.createElement(
+                    'select',
+                    {
+                      name: 'gender',
+                      value: formData.gender,
+                      onChange: handleChange,
+                      disabled: !isEditing,
+                      className: `mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ${!isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`
+                    },
+                    React.createElement('option', { value: 'Female' }, 'Female'),
+                    React.createElement('option', { value: 'Male' }, 'Male'),
+                    React.createElement('option', { value: 'Other' }, 'Other')
+                  )
+                ),
+                React.createElement(
+                  'div',
+                  null,
+                  React.createElement(
+                    'label',
+                    { className: 'block text-sm font-medium text-gray-700' },
+                    'Marital Status'
+                  ),
+                  React.createElement(
+                    'select',
+                    {
+                      name: 'maritalStatus',
+                      value: formData.maritalStatus,
+                      onChange: handleChange,
+                      disabled: !isEditing,
+                      className: `mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ${!isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`
+                    },
+                    React.createElement('option', { value: 'Single' }, 'Single'),
+                    React.createElement('option', { value: 'Married' }, 'Married'),
+                    React.createElement('option', { value: 'Divorced' }, 'Divorced'),
+                    React.createElement('option', { value: 'Widowed' }, 'Widowed')
+                  )
+                )
+              )
+            ),
+            React.createElement(
+              'section',
+              null,
+              React.createElement(
+                'h2',
+                { className: 'text-xl font-semibold text-gray-800 mb-6 border-b border-gray-200 pb-2' },
+                'Contact Information'
+              ),
+              React.createElement(
+                'div',
+                { className: 'space-y-6' },
+                React.createElement(
+                  'div',
+                  null,
+                  React.createElement(
+                    'label',
+                    { className: 'block text-sm font-medium text-gray-700' },
+                    'Address'
+                  ),
+                  React.createElement('input', {
+                    type: 'text',
+                    name: 'address',
+                    value: formData.address,
+                    onChange: handleChange,
+                    disabled: !isEditing,
+                    className: `mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ${!isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`
+                  })
+                ),
+                React.createElement(
+                  'div',
+                  null,
+                  React.createElement(
+                    'label',
+                    { className: 'block text-sm font-medium text-gray-700' },
+                    'Phone'
+                  ),
+                  React.createElement('input', {
+                    type: 'tel',
+                    name: 'phone',
+                    value: formData.phone,
+                    onChange: handleChange,
+                    disabled: !isEditing,
+                    className: `mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ${!isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`
+                  })
+                ),
+                React.createElement(
+                  'div',
+                  null,
+                  React.createElement(
+                    'label',
+                    { className: 'block text-sm font-medium text-gray-700' },
+                    'Email'
+                  ),
+                  React.createElement('input', {
+                    type: 'email',
+                    name: 'email',
+                    value: formData.email,
+                    onChange: handleChange,
+                    disabled: !isEditing,
+                    className: `mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ${!isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`
+                  })
+                ),
+                React.createElement(
+                  'div',
+                  null,
+                  React.createElement(
+                    'label',
+                    { className: 'block text-sm font-medium text-gray-700' },
+                    'Emergency Contact'
+                  ),
+                  React.createElement('input', {
+                    type: 'text',
+                    name: 'emergencyContact',
+                    value: formData.emergencyContact,
+                    onChange: handleChange,
+                    disabled: !isEditing,
+                    className: `mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ${!isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`
+                  })
+                )
+              )
+            )
+          ),
+          React.createElement(
+            'div',
+            { className: 'mt-12 flex justify-center space-x-4' },
+            isEditing
+              ? React.createElement(
+                  'button',
+                  {
+                    onClick: handleSave,
+                    className: 'bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-200 ease-in-out transform hover:-translate-y-1'
+                  },
+                  'Save'
+                )
+              : React.createElement(
+                  'button',
+                  {
+                    onClick: toggleEdit,
+                    className: 'bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-200 ease-in-out transform hover:-translate-y-1'
+                  },
+                  'Edit'
+                ),
+            React.createElement(
+              'a',
+              {
+                href: `dashboard.html?pid=${pid}`,
+                className: 'inline-block bg-gray-500 text-white font-semibold py-3 px-6 rounded-lg hover:bg-gray-600 transition duration-200 ease-in-out transform hover:-translate-y-1'
+              },
+              'Return to Dashboard'
+            )
+          )
+        )
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(DemographicsForm));
+  </script>
+</body>
+</html>

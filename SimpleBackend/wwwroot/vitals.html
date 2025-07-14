@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vitals</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .header { background: linear-gradient(to right, #1e3a8a, #3b82f6); }
+    .btn-primary { background-color: #1e3a8a; transition: background-color 0.2s; color:#fff; font-weight:600; border-radius:4px; padding:8px 16px; }
+    .btn-primary:hover { background-color: #1e40af; }
+    .card { border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    table { width:100%; border-collapse: collapse; }
+    th,td { padding: 10px; border: 1px solid #e5e7eb; text-align: left; }
+    th { background:#f1f5f9; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col" x-data="vitalsPage()" x-init="init()">
+  <!-- Header -->
+  <header class="header text-white py-4">
+    <div class="container mx-auto px-6 flex items-center justify-between">
+      <h1 class="text-xl font-semibold">Healthcare Portal</h1>
+      <nav>
+        <a :href="`dashboard.html?pid=${pid}`" class="hover:text-gray-200">Back to Dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="flex-grow container mx-auto px-6 py-10">
+    <h2 class="text-2xl font-semibold text-gray-800 mb-6">Vitals</h2>
+
+    <!-- Add vital form -->
+    <div class="bg-white p-6 mb-8 card">
+      <h3 class="text-lg font-medium mb-4">Add Vital</h3>
+      <form class="grid md:grid-cols-6 gap-4" @submit.prevent="save()">
+        <select x-model="form.type" required class="border rounded p-2 md:col-span-2">
+          <option value="" disabled>Select Type</option>
+          <option value="Weight">Weight</option>
+          <option value="Height">Height</option>
+          <option value="Blood Pressure">Blood Pressure</option>
+          <option value="Heart Rate">Heart Rate</option>
+          <option value="Temperature">Temperature</option>
+        </select>
+        <input x-model="form.value" required placeholder="Value" class="border rounded p-2 md:col-span-1">
+        <input x-model="form.unit" placeholder="Unit (kg, mmHg, bpm, °C, etc.)" class="border rounded p-2 md:col-span-1">
+        <input x-model="form.date" type="date" required class="border rounded p-2 md:col-span-1">
+        <button type="submit" class="btn-primary md:col-span-1">Save</button>
+      </form>
+    </div>
+
+    <!-- Vitals list -->
+    <div class="bg-white p-6 card">
+      <h3 class="text-lg font-medium mb-4">Recorded Vitals</h3>
+      <template x-if="vitals.length === 0">
+        <p class="text-gray-600">No vitals recorded.</p>
+      </template>
+      <template x-if="vitals.length > 0">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Type</th><th>Value</th><th>Unit</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="v in vitals" :key="v.id">
+              <tr>
+                <td x-text="new Date(v.date).toLocaleDateString()"></td>
+                <td x-text="v.type"></td>
+                <td x-text="v.value"></td>
+                <td x-text="v.unit"></td>
+                <td class="text-right"><button class="text-red-600" @click="remove(v.id)">Delete</button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </template>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-800 text-white py-4">
+    <div class="container mx-auto px-6 text-center text-sm">© 2025 Healthcare Portal. All rights reserved.</div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <script>
+    function vitalsPage(){
+      return {
+        pid: null,
+        vitals: [],
+        form: { type:'', value:'', unit:'', date:'' },
+        init(){
+          const params = new URLSearchParams(window.location.search);
+          this.pid = params.get('pid');
+          this.load();
+        },
+        load(){
+          if(!this.pid) return;
+          const saved = localStorage.getItem(`vitals-${this.pid}`);
+          this.vitals = saved ? JSON.parse(saved) : [];
+        },
+        save(){
+          if(!this.form.type || !this.form.value || !this.form.date) return;
+          this.vitals.push({ ...this.form, id: Date.now() });
+          localStorage.setItem(`vitals-${this.pid}`, JSON.stringify(this.vitals));
+          this.form = { type:'', value:'', unit:'', date:'' };
+        },
+        remove(id){
+          this.vitals = this.vitals.filter(v => v.id !== id);
+          localStorage.setItem(`vitals-${this.pid}`, JSON.stringify(this.vitals));
+        }
+      }
+    }
+  </script>
+</body>
+</html>

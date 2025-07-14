@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appointments</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .sidebar { min-height: 80vh; }
+        .card { border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
+        .header { background: linear-gradient(to right, #1e3a8a, #3b82f6); }
+        .btn-primary { background-color: #1e3a8a; transition: background-color 0.3s; }
+        .btn-primary:hover { background-color: #1e40af; }
+        .divider { border-top: 1px solid #e5e7eb; }
+        .custom-modal-enter {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        .custom-modal-enter-active {
+            opacity: 1;
+            transform: scale(1);
+            transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1), transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .custom-modal-leave {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .custom-modal-leave-active {
+            opacity: 0;
+            transform: scale(0.95);
+            transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1), transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .custom-modal-box {
+            background: #fff;
+            border-radius: 1rem;
+            box-shadow: 0 8px 32px rgba(30, 58, 138, 0.18), 0 1.5px 6px rgba(0,0,0,0.08);
+            padding: 2.5rem 2rem 2rem 2rem;
+            min-width: 340px;
+            max-width: 90vw;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .custom-modal-message {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        .custom-modal-btn {
+            background: #1e3a8a;
+            color: #fff;
+            font-weight: 600;
+            border-radius: 0.375rem;
+            padding: 0.5rem 2.5rem;
+            font-size: 1rem;
+            box-shadow: 0 1px 4px rgba(30,58,138,0.08);
+            transition: background 0.18s;
+        }
+        .custom-modal-btn:hover {
+            background: #1e40af;
+        }
+    </style>
+</head>
+<body class="bg-gray-50" x-data="appointmentPage()" x-init="init()">
+    <header class="header text-white py-4">
+        <div class="container mx-auto px-6 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">Appointments</h1>
+            <nav>
+                <button @click="window.location='dashboard.html?pid='+pid" class="text-white hover:text-gray-200">Back to Dashboard</button>
+            </nav>
+        </div>
+    </header>
+    <div class="container mx-auto px-6 py-8">
+        <div class="flex gap-6">
+            <div class="w-full bg-white p-6 rounded-lg card">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-semibold text-gray-800">Manage Appointments</h3>
+                    <button @click="showNewAppointmentForm = true" class="btn-primary text-white px-4 py-2 rounded-md font-medium">+ New Appointment</button>
+                </div>
+                <!-- New Appointment Form -->
+                <div x-show="showNewAppointmentForm" class="mb-6 p-4 border rounded-lg bg-gray-50">
+                    <h4 class="font-medium text-gray-800 mb-3">Schedule New Appointment</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                            <input type="date" x-model="newAppointment.date" class="w-full p-2 border rounded-md">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                            <input type="time" x-model="newAppointment.time" class="w-full p-2 border rounded-md">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                            <select x-model.number="newAppointment.duration" class="w-full p-2 border rounded-md">
+                                <option value="10">10 minutes</option>
+                                <option value="20">20 minutes</option>
+                                <option value="30" selected>30 minutes</option>
+                            </select>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Doctor Name</label>
+                            <input type="text" x-model="newAppointment.doctorName" class="w-full p-2 border rounded-md bg-gray-100" readonly>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                            <textarea x-model="newAppointment.reason" rows="2" class="w-full p-2 border rounded-md"></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex justify-end space-x-3">
+                        <button @click="showNewAppointmentForm = false" class="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-100">Cancel</button>
+                        <button @click="scheduleAppointment()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Schedule</button>
+                    </div>
+                </div>
+                <!-- Appointments List -->
+                <div class="space-y-4">
+                    <template x-if="appointments.length === 0">
+                        <div class="text-center py-8 text-gray-500">
+                            No appointments scheduled.
+                        </div>
+                    </template>
+                    <template x-for="(appointment, index) in appointments" :key="appointment.id">
+                        <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h4 class="font-medium text-gray-800" x-text="'Appointment with ' + (appointment.doctorName || 'Doctor')"></h4>
+                                    <p class="text-sm text-gray-600 mt-1" x-text="formatDateTime(appointment.date, appointment.time)"></p>
+                                    <p class="text-sm text-gray-600" x-text="'Reason: ' + (appointment.reason || 'Not specified')"></p>
+                                    <p class="text-sm text-gray-600" x-text="'Duration: ' + (appointment.duration || 30) + ' minutes'"></p>
+                                </div>
+                                <div class="flex space-x-2">
+                                    <button @click="cancelAppointment(index)" class="text-red-600 hover:text-red-800 text-sm font-medium">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div x-show="showPopup" x-transition:enter="custom-modal-enter" x-transition:enter-active="custom-modal-enter-active" x-transition:leave="custom-modal-leave" x-transition:leave-active="custom-modal-leave-active" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50" style="backdrop-filter: blur(2px);">
+        <div class="custom-modal-box">
+            <div class="custom-modal-message" x-text="popupMessage"></div>
+            <button class="custom-modal-btn mt-2" @click="showPopup=false">OK</button>
+        </div>
+    </div>
+    <script>
+        function appointmentPage() {
+            return {
+                pid: null,
+                showNewAppointmentForm: false,
+                appointments: [],
+                newAppointment: {
+                    date: '',
+                    time: '',
+                    doctorName: localStorage.getItem('doctorName') || '',
+                    reason: '',
+                    duration: 30
+                },
+                showPopup: false,
+                popupMessage: '',
+                formatDateTime(date, time) {
+                    if (!date) return '';
+                    let dateStr = typeof date === 'string' ? date : (date instanceof Date ? date.toISOString().split('T')[0] : '');
+                    // Convert DD-MM-YYYY to YYYY-MM-DD if needed
+                    if (dateStr && /^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
+                        const [dd, mm, yyyy] = dateStr.split('-');
+                        dateStr = `${yyyy}-${mm}-${dd}`;
+                    }
+                    // If dateStr is in YYYY-MM-DDTHH:mm:ss format, split at T
+                    if (dateStr && dateStr.includes('T')) {
+                        dateStr = dateStr.split('T')[0];
+                    }
+                    if (!dateStr) return 'Invalid Date';
+                    // If time is missing or null, use 00:00
+                    let timeStr = time || '00:00';
+                    // If time is in HH:mm:ss, use only HH:mm
+                    if (/^\d{2}:\d{2}:\d{2}$/.test(timeStr)) {
+                        timeStr = timeStr.slice(0, 5);
+                    }
+                    // Compose ISO string
+                    const d = new Date(`${dateStr}T${timeStr}`);
+                    return isNaN(d) ? 'Invalid Date' : d.toLocaleString();
+                },
+                scheduleAppointment() {
+                    if (!this.newAppointment.date || !this.newAppointment.time) return;
+                    let doctorName = localStorage.getItem('doctorName') || this.newAppointment.doctorName || '';
+                    let doctorId = Number(localStorage.getItem('doctorId')) || null;
+                    let patientName = localStorage.getItem('currentPatientName') || '';
+                    this.newAppointment.doctorName = doctorName;
+                    // Prepare input for conflict check
+                    const checkInput = {
+                        Date: this.newAppointment.date,
+                        Time: this.newAppointment.time,
+                        Provider: doctorName,
+                        Reason: this.newAppointment.reason,
+                        DoctorNotes: '',
+                        Remedy: '',
+                        PatientName: patientName,
+                        DoctorName: doctorName,
+                        DoctorId: doctorId,
+                        Duration: this.newAppointment.duration
+                    };
+                    fetch('/api/appointments/check-conflict', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(checkInput)
+                    })
+                    .then(res => res.json())
+                    .then(result => {
+                        if (result.conflict) {
+                            this.popupMessage = 'Appointment slot already booked by ' + (result.patientName || 'another patient');
+                            this.showPopup = true;
+                            return;
+                        }
+                        // No conflict, proceed to create appointment
+                        fetch(`/api/patients/${this.pid}/appointments`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(checkInput)
+                        })
+                        .then(res => {
+                            if (!res.ok) throw new Error('Failed to save appointment');
+                            return res.json();
+                        })
+                        .then(() => {
+                            this.loadAppointments();
+                            this.newAppointment = { date: '', time: '', doctorName, reason: '', duration: 30 };
+                            this.showNewAppointmentForm = false;
+                        })
+                        .catch(err => {
+                            this.popupMessage = 'Error saving appointment: ' + err.message;
+                            this.showPopup = true;
+                        });
+                    });
+                },
+                loadAppointments() {
+                    fetch(`/api/patients/${this.pid}/appointments`)
+                        .then(res => res.json())
+                        .then(appts => { this.appointments = appts; });
+                },
+                cancelAppointment(index) {
+                    const appointmentToDelete = this.appointments[index];
+                    if (!appointmentToDelete) return;
+                    fetch(`/api/patients/${this.pid}/appointments/${appointmentToDelete.id}`, {
+                        method: 'DELETE'
+                    })
+                    .then(res => {
+                        if (!res.ok) throw new Error('Failed to delete appointment');
+                        this.loadAppointments();
+                    })
+                    .catch(err => {
+                        this.popupMessage = 'Error deleting appointment: ' + err.message;
+                        this.showPopup = true;
+                    });
+                },
+                init() {
+                    let id = new URLSearchParams(window.location.search).get('pid');
+                    if (!id) {
+                        id = localStorage.getItem('currentPid');
+                    }
+                    if (!id) return;
+                    this.pid = id;
+                    localStorage.setItem('currentPid', id);
+                    this.loadAppointments();
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@2.8.2/dist/alpine.min.js" defer></script>
+</body>
+</html>

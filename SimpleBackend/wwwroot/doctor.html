@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doctor Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .header { background: linear-gradient(to right, #1e3a8a, #3b82f6); }
+        .btn-primary { background-color: #1e3a8a; transition: background-color 0.2s; color:#fff; font-weight:600; border-radius:4px; padding:8px 16px; }
+        .btn-primary:hover { background-color: #1e40af; }
+        .card { border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        table { width:100%; border-collapse: collapse; }
+        th,td { padding: 10px; border: 1px solid #e5e7eb; text-align: left; }
+        th { background:#f1f5f9; }
+        tr:hover { background:#f9fafb; cursor:pointer; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+        .calendar-day { aspect-ratio: 1; border: 1px solid #e5e7eb; padding: 4px; font-size: 12px; position: relative; }
+        .calendar-day.other-month { color: #9ca3af; background-color: #f9fafb; }
+        .calendar-day.today { background-color: #3b82f6; color: white; font-weight: bold; }
+        .calendar-day.has-appointment { background-color: #fef3c7; }
+        .calendar-day.has-appointment.today { background-color: #1e40af; }
+        .appointment-dot { position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; background-color: #ef4444; border-radius: 50%; }
+        .tab-btn { padding: 8px 16px; border: 1px solid #d1d5db; background: white; cursor: pointer; transition: all 0.2s; }
+        .tab-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .tab-btn:hover:not(.active) { background: #f3f4f6; }
+        /* Year View Scroll - only for year calendar grid */
+        .year-view-scroll {
+            max-height: 65vh;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <header class="header py-4 text-white">
+        <div class="container mx-auto px-6 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">Healthcare Portal</h1>
+            <nav></nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-8" x-data="doctor()">
+        <div class="mb-4 flex justify-between items-center">
+            <span x-text="greeting" class="text-gray-700 text-2xl font-bold"></span>
+            <button class="btn-primary" @click="showLogoutConfirm=true">Logout</button>
+        </div>
+        <div x-show="showLogoutConfirm" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+            <div x-transition:enter="transition transform duration-200" x-transition:enter-start="scale-90 opacity-0" x-transition:enter-end="scale-100 opacity-100" x-transition:leave="transition transform duration-150" x-transition:leave-start="scale-100 opacity-100" x-transition:leave-end="scale-90 opacity-0" class="bg-white rounded-lg shadow-lg p-8 flex flex-col items-center">
+                <div class="text-xl font-semibold mb-4">Are you sure you want to log out?</div>
+                <div class="flex gap-6">
+                    <button class="btn-primary px-6" @click="confirmLogout">Yes</button>
+                    <button class="btn-primary bg-gray-300 text-gray-800 hover:bg-gray-400" @click="showLogoutConfirm=false">No</button>
+                </div>
+            </div>
+        </div>
+        <div class="mb-8 flex flex-wrap gap-6">
+            <div class="flex-1 min-w-[220px] bg-gradient-to-r from-blue-500 to-blue-400 rounded-xl shadow-lg p-6 flex items-center gap-4">
+                <div class="bg-white bg-opacity-30 rounded-lg p-3 flex items-center justify-center">
+                    <svg xmlns='http://www.w3.org/2000/svg' class='h-8 w-8 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2m-6 4h6a2 2 0 002-2v-5a2 2 0 00-2-2h-1V7a2 2 0 00-2-2h-2a2 2 0 00-2 2v5H7a2 2 0 00-2 2v5a2 2 0 002 2z' /></svg>
+                </div>
+                <div>
+                    <div class="text-white font-semibold text-lg">Visited Today</div>
+                    <div class="text-2xl font-bold text-white" x-text="todayCount"></div>
+                </div>
+            </div>
+            <div class="flex-1 min-w-[220px] bg-gradient-to-r from-green-400 to-green-300 rounded-xl shadow-lg p-6 flex items-center gap-4">
+                <div class="bg-white bg-opacity-30 rounded-lg p-3 flex items-center justify-center">
+                    <svg xmlns='http://www.w3.org/2000/svg' class='h-8 w-8 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M12 8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 10c-4.41 0-8-1.79-8-4V7c0-2.21 3.59-4 8-4s8 1.79 8 4v7c0 2.21-3.59 4-8 4z' /></svg>
+                </div>
+                <div>
+                    <div class="text-white font-semibold text-lg">This Week</div>
+                    <div class="text-2xl font-bold text-white" x-text="weekCount"></div>
+                </div>
+            </div>
+            <div class="flex-1 min-w-[220px] bg-gradient-to-r from-pink-400 to-pink-300 rounded-xl shadow-lg p-6 flex items-center gap-4">
+                <div class="bg-white bg-opacity-30 rounded-lg p-3 flex items-center justify-center">
+                    <svg xmlns='http://www.w3.org/2000/svg' class='h-8 w-8 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M3 8h18M3 16h18M5 12h14' /></svg>
+                </div>
+                <div>
+                    <div class="text-white font-semibold text-lg">This Month</div>
+                    <div class="text-2xl font-bold text-white" x-text="monthCount"></div>
+                </div>
+            </div>
+            <div class="flex-1 min-w-[220px] bg-gradient-to-r from-purple-500 to-purple-400 rounded-xl shadow-lg p-6 flex items-center gap-4">
+                <div class="bg-white bg-opacity-30 rounded-lg p-3 flex items-center justify-center">
+                    <svg xmlns='http://www.w3.org/2000/svg' class='h-8 w-8 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' /></svg>
+                </div>
+                <div>
+                    <div class="text-white font-semibold text-lg">This Year</div>
+                    <div class="text-2xl font-bold text-white" x-text="yearCount"></div>
+                </div>
+            </div>
+        </div>
+        <div class="mb-6 flex flex-row gap-4">
+            <button class="btn-primary" @click="goToPatientMgmt">Add/Delete Patients</button>
+            <button class="btn-primary" @click="goToAllPatients">Click to see all patients</button>
+            <button class="btn-primary" @click="showAllAppointments = true">All Appointments</button>
+            <a href="patient-reports.html" class="btn-primary">Patient's lab reports</a>
+        </div>
+        <!-- All Appointments Calendar Popup -->
+        <div x-show="showAllAppointments" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+            <div class="bg-white rounded-lg shadow-lg p-4 w-[95vw] max-w-[1100px] max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-semibold">All Appointments</h2>
+                    <button class="btn-primary" @click="showAllAppointments = false">Close</button>
+                </div>
+                
+                <!-- Time Period Tabs -->
+                <div class="mb-6 flex gap-2">
+                    <button class="tab-btn" :class="{ 'active': activeTab === 'today' }" @click="setActiveTab('today')">Today</button>
+                    <button class="tab-btn" :class="{ 'active': activeTab === 'week' }" @click="setActiveTab('week')">Week</button>
+                    <button class="tab-btn" :class="{ 'active': activeTab === 'month' }" @click="setActiveTab('month')">Month</button>
+                    <button class="tab-btn" :class="{ 'active': activeTab === 'year' }" @click="setActiveTab('year')">Year</button>
+                </div>
+
+                <!-- Calendar Navigation -->
+                <div class="mb-4 flex justify-between items-center">
+                    <div class="flex items-center gap-4">
+                        <button class="btn-primary" @click="navigateCalendar(-1)">‹</button>
+                        <h3 class="text-lg font-semibold" x-text="calendarTitle"></h3>
+                        <button class="btn-primary" @click="navigateCalendar(1)">›</button>
+                    </div>
+                    <button class="btn-primary bg-gray-500 hover:bg-gray-600" @click="goToToday">Today</button>
+                </div>
+
+                <!-- Calendar Content -->
+                <div class="calendar-container">
+                    <!-- Today View -->
+                    <div x-show="activeTab === 'today'" class="space-y-4">
+                        <div class="text-center text-lg font-semibold mb-4" x-text="formatDate(currentDate)"></div>
+                        <template x-if="todayAppointments.length === 0">
+                            <div class="text-center text-gray-500 py-8">No appointments for today</div>
+                        </template>
+                        <template x-for="appt in todayAppointments" :key="appt.id">
+                            <div class="border rounded-lg p-4 flex justify-between items-center hover:bg-gray-50">
+                                <div>
+                                    <div class="font-semibold" x-text="appt.patientName || 'Unknown Patient'"></div>
+                                    <div class="text-sm text-gray-600" x-text="appt.reason || 'General Consultation'"></div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-semibold" x-text="formatTime(appt.time)"></div>
+                                    <div class="text-sm text-gray-600" x-text="appt.duration || '30 min'"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Week View -->
+                    <div x-show="activeTab === 'week'" class="grid grid-cols-7 gap-1 mb-4">
+                        <template x-for="(day, i) in ['S', 'M', 'T', 'W', 'T', 'F', 'S']" :key="day + i">
+                            <div class="text-center font-semibold p-2 bg-gray-100" x-text="day"></div>
+                        </template>
+                        <template x-for="date in weekDates" :key="date.dateStr">
+                            <div class="calendar-day min-h-[80px] p-2" :class="{ 'today': date.isToday, 'has-appointment': date.hasAppointment }">
+                                <div class="font-semibold" x-text="date.day"></div>
+                                <template x-if="date.hasAppointment">
+                                    <div class="appointment-dot"></div>
+                                </template>
+                                <!-- Show up to 2 doctor names for appointments -->
+                                <template x-for="appt in date.appointments?.slice(0, 2)" :key="appt.id">
+                                    <div class="text-xs mt-1 text-blue-900 truncate" x-text="appt.PatientName || appt.patientName || 'Patient'"></div>
+                                </template>
+                                <template x-if="date.appointments?.length > 2">
+                                    <div class="text-xs text-gray-500">+<span x-text="date.appointments.length - 2"></span> more</div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Month View -->
+                    <div x-show="activeTab === 'month'">
+                        <div class="grid grid-cols-7 gap-1 mb-2">
+                            <template x-for="(day, i) in ['S', 'M', 'T', 'W', 'T', 'F', 'S']" :key="day + i">
+                                <div class="text-center font-semibold p-2 bg-gray-100" x-text="day"></div>
+                            </template>
+                        </div>
+                        <div class="calendar-grid">
+                            <template x-for="date in monthDates" :key="date.dateStr">
+                                <div class="calendar-day min-h-[60px] p-1" :class="{ 'today': date.isToday, 'has-appointment': date.hasAppointment, 'other-month': date.otherMonth }">
+                                    <div class="font-semibold text-xs" x-text="date.day"></div>
+                                    <template x-if="date.hasAppointment">
+                                        <div class="appointment-dot"></div>
+                                    </template>
+                                    <!-- Show up to 2 doctor names for appointments -->
+                                    <template x-for="appt in date.appointments?.slice(0, 2)" :key="appt.id">
+                                        <div class="text-xs mt-1 text-blue-900 truncate" x-text="appt.PatientName || appt.patientName || 'Patient'"></div>
+                                    </template>
+                                    <template x-if="date.appointments?.length > 2">
+                                        <div class="text-xs text-gray-500">+<span x-text="date.appointments.length - 2"></span> more</div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Year View -->
+                    <div x-show="activeTab === 'year'" class="w-full max-w-6xl mx-auto">
+                        <div class="year-view-scroll grid grid-cols-3 gap-4 p-2">
+                            <!-- months go here -->
+                            <template x-for="month in yearMonths" :key="month.name">
+                                <div class="border rounded-lg p-2 bg-white shadow-sm">
+                                    <div class="text-center font-semibold text-sm mb-2" x-text="month.name"></div>
+                                    <div class="grid grid-cols-7 gap-1">
+                                        <template x-for="(day, i) in ['S', 'M', 'T', 'W', 'T', 'F', 'S']" :key="day + i">
+                                            <div class="text-center text-xs font-medium p-1 text-gray-600" x-text="day"></div>
+                                        </template>
+                                        <template x-for="date in month.dates" :key="date.dateStr">
+                                            <div class="aspect-square text-xs flex flex-col items-center justify-center relative p-1 rounded hover:bg-gray-50 cursor-pointer" :class="{ 'today': date.isToday, 'has-appointment': date.hasAppointment, 'other-month': date.otherMonth }">
+                                                <span class="font-medium" x-text="date.day"></span>
+                                                <template x-if="date.hasAppointment">
+                                                    <div class="appointment-dot"></div>
+                                                </template>
+                                                <!-- Show first patient name for appointments -->
+                                                <template x-if="date.appointments?.length > 0">
+                                                    <div class="text-[9px] text-blue-700 truncate leading-tight max-w-full" x-text="date.appointments[0].PatientName || date.appointments[0].patientName || 'Patient'"></div>
+                                                </template>
+                                                <template x-if="date.appointments?.length > 1">
+                                                    <div class="text-[8px] text-gray-500 leading-tight">+<span x-text="date.appointments.length - 1"></span></div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <div class="mt-2 text-xs text-gray-600 text-center" x-text="month.appointmentCount + ' appointments'"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Your Patients list -->
+        <div class="bg-white p-6 mb-8 card">
+            <h3 class="text-lg font-medium mb-4">Your Patients</h3>
+            <table>
+                <thead>
+                    <tr><th>ID</th><th>Name</th><th>Age</th><th>Gender</th><th>Contact</th><th>Note</th><th>Field</th></tr>
+                </thead>
+                <tbody>
+                    <template x-for="p in yourPatients" :key="p.id">
+                        <tr x-on:click="openDashboard(p.id)">
+                            <td x-text="p.id"></td>
+                            <td x-text="p.name"></td>
+                            <td x-text="p.age ?? '-' "></td>
+                            <td x-text="p.gender ?? '-' "></td>
+                            <td x-text="p.contact ?? '-' "></td>
+                            <td x-text="p.note ?? '-' "></td>
+                            <td x-text="p.specialization ?? '-' "></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script>
+        function doctor(){
+            return {
+                token: localStorage.getItem('token') || '',
+                doctorId: Number(localStorage.getItem('doctorId')) || null,
+                doctorName: localStorage.getItem('doctorName') || '',
+                specialization: localStorage.getItem('specialization') || '',
+                doctors: [],
+                patients: [],
+                yourPatients: [],
+                greeting: '',
+                todayCount: 0,
+                weekCount: 0,
+                monthCount: 0,
+                yearCount: 0,
+                showLogoutConfirm: false,
+                showAllAppointments: false,
+                activeTab: 'today',
+                currentDate: new Date(),
+                allAppointments: [],
+                todayAppointments: [],
+                weekDays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+                calendarTitle: '',
+                weekDates: [],
+                monthDates: [],
+                yearMonths: [],
+                confirmLogout() {
+                    localStorage.clear();
+                    window.location = 'login.html';
+                },
+                goToPatientMgmt() {
+                    window.location = 'add-del-patients.html';
+                },
+                goToAllPatients() {
+                    window.location = 'all-patients.html';
+                },
+                getGreeting() {
+                    const hour = new Date().getHours();
+                    if (hour < 12) return 'Good morning';
+                    if (hour < 16) return 'Good afternoon';
+                    if (hour < 19) return 'Good evening';
+                    return 'Hello';
+                },
+                refreshGreeting() {
+                    this.greeting = this.getGreeting() + (this.doctorName ? ` Dr. ${this.doctorName},` : '');
+                },
+                setActiveTab(tab) {
+                    this.activeTab = tab;
+                    this.updateCalendarTitle();
+                },
+                updateCalendarTitle() {
+                    const date = this.currentDate;
+                    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+                    
+                    switch(this.activeTab) {
+                        case 'today':
+                            this.calendarTitle = this.formatDate(date);
+                            break;
+                        case 'week':
+                            const weekStart = new Date(date);
+                            weekStart.setDate(date.getDate() - date.getDay());
+                            const weekEnd = new Date(weekStart);
+                            weekEnd.setDate(weekStart.getDate() + 6);
+                            this.calendarTitle = `${monthNames[weekStart.getMonth()]} ${weekStart.getDate()} - ${monthNames[weekEnd.getMonth()]} ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`;
+                            break;
+                        case 'month':
+                            this.calendarTitle = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+                            break;
+                        case 'year':
+                            this.calendarTitle = `${date.getFullYear()}`;
+                            break;
+                    }
+                },
+                navigateCalendar(direction) {
+                    const date = new Date(this.currentDate);
+                    
+                    switch(this.activeTab) {
+                        case 'today':
+                            date.setDate(date.getDate() + direction);
+                            break;
+                        case 'week':
+                            date.setDate(date.getDate() + (direction * 7));
+                            break;
+                        case 'month':
+                            date.setMonth(date.getMonth() + direction);
+                            break;
+                        case 'year':
+                            date.setFullYear(date.getFullYear() + direction);
+                            break;
+                    }
+                    
+                    this.currentDate = date;
+                    this.updateCalendarTitle();
+                    this.generateCalendarData();
+                },
+                goToToday() {
+                    this.currentDate = new Date();
+                    this.updateCalendarTitle();
+                    this.generateCalendarData();
+                },
+                formatDate(date) {
+                    return date.toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    });
+                },
+                formatTime(time) {
+                    if (!time) return '';
+                    if (/^\d{2}:\d{2}:\d{2}$/.test(time)) return time.slice(0,5);
+                    return time;
+                },
+                generateCalendarData() {
+                    // Generate sample appointments for demonstration
+                    this.todayAppointments = this.getAppointmentsForDate(this.currentDate);
+                    this.weekDates = this.generateWeekDates();
+                    this.monthDates = this.generateMonthDates();
+                    this.yearMonths = this.generateYearMonths();
+                },
+                getAppointmentsForDate(date) {
+                    // Use only the date part for comparison, ignore time and timezone
+                    const y = date.getFullYear();
+                    const m = date.getMonth();
+                    const d = date.getDate();
+                    return this.allAppointments.filter(appt => {
+                        let dateStr = appt.Date || appt.date;
+                        let apptDate = new Date(dateStr);
+                        // If dateStr is only a date string (no time), parse as local
+                        if (dateStr && dateStr.length === 10) {
+                            const [yy, mm, dd] = dateStr.split('-');
+                            apptDate = new Date(Number(yy), Number(mm) - 1, Number(dd));
+                        }
+                        return (
+                            apptDate.getFullYear() === y &&
+                            apptDate.getMonth() === m &&
+                            apptDate.getDate() === d
+                        );
+                    });
+                },
+                generateWeekDates() {
+                    const dates = [];
+                    const startOfWeek = new Date(this.currentDate);
+                    startOfWeek.setDate(this.currentDate.getDate() - this.currentDate.getDay());
+                    
+                    for (let i = 0; i < 7; i++) {
+                        const date = new Date(startOfWeek);
+                        date.setDate(startOfWeek.getDate() + i);
+                        
+                        const appointments = this.getAppointmentsForDate(date);
+                        dates.push({
+                            dateStr: date.toISOString().split('T')[0],
+                            day: date.getDate(),
+                            isToday: this.isToday(date),
+                            hasAppointment: appointments.length > 0,
+                            appointments: appointments
+                        });
+                    }
+                    return dates;
+                },
+                generateMonthDates() {
+                    const dates = [];
+                    const year = this.currentDate.getFullYear();
+                    const month = this.currentDate.getMonth();
+                    
+                    // Get first day of month and calculate start of calendar
+                    const firstDay = new Date(year, month, 1);
+                    const startDate = new Date(firstDay);
+                    startDate.setDate(firstDay.getDate() - firstDay.getDay());
+                    
+                    // Generate 42 days (6 weeks)
+                    for (let i = 0; i < 42; i++) {
+                        const date = new Date(startDate);
+                        date.setDate(startDate.getDate() + i);
+                        
+                        const appointments = this.getAppointmentsForDate(date);
+                        dates.push({
+                            dateStr: date.toISOString().split('T')[0],
+                            day: date.getDate(),
+                            isToday: this.isToday(date),
+                            hasAppointment: appointments.length > 0,
+                            appointments: appointments,
+                            otherMonth: date.getMonth() !== month
+                        });
+                    }
+                    return dates;
+                },
+                generateYearMonths() {
+                    const months = [];
+                    const year = this.currentDate.getFullYear();
+                    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+                    
+                    for (let month = 0; month < 12; month++) {
+                        const firstDay = new Date(year, month, 1);
+                        const lastDay = new Date(year, month + 1, 0);
+                        const startDate = new Date(firstDay);
+                        startDate.setDate(firstDay.getDate() - firstDay.getDay());
+                        
+                        const dates = [];
+                        let appointmentCount = 0;
+                        
+                        for (let i = 0; i < 42; i++) {
+                            const date = new Date(startDate);
+                            date.setDate(startDate.getDate() + i);
+                            
+                            const appointments = this.getAppointmentsForDate(date);
+                            if (appointments.length > 0 && date.getMonth() === month) {
+                                appointmentCount += appointments.length;
+                            }
+                            
+                            dates.push({
+                                dateStr: date.toISOString().split('T')[0],
+                                day: date.getDate(),
+                                isToday: this.isToday(date),
+                                hasAppointment: appointments.length > 0,
+                                appointments: appointments,
+                                otherMonth: date.getMonth() !== month
+                            });
+                        }
+                        
+                        months.push({
+                            name: monthNames[month],
+                            dates: dates,
+                            appointmentCount: appointmentCount
+                        });
+                    }
+                    return months;
+                },
+                isToday(date) {
+                    const today = new Date();
+                    return date.toDateString() === today.toDateString();
+                },
+                async refresh(){
+                    try {
+                        const [dres, pres, ypres] = await Promise.all([
+                            fetch('/api/doctors', { headers: { Authorization: 'Bearer ' + this.token } }),
+                            fetch('/api/patients', { headers: { Authorization: 'Bearer ' + this.token } }),
+                            this.doctorId ? fetch(`/api/patients/doctor/${this.doctorId}`, { headers: { Authorization: 'Bearer ' + this.token } }) : Promise.resolve({ json: async () => [] })
+                        ]);
+                        if (!dres.ok) throw new Error('Failed to fetch doctors: ' + dres.status);
+                        if (!pres.ok) throw new Error('Failed to fetch patients: ' + pres.status);
+                        const doctors = await dres.json();
+                        const patients = await pres.json();
+                        const yourPatients = this.doctorId ? await ypres.json() : [];
+                        this.doctors = doctors;
+                        this.patients = patients;
+                        this.yourPatients = yourPatients;
+                        this.refreshGreeting();
+                    } catch (e) {
+                        alert('Session expired or unauthorized. Please login again.');
+                        localStorage.clear();
+                        window.location = 'login.html';
+                    }
+                },
+                async fetchCounts() {
+                    if (!this.doctorId) return;
+                    const token = this.token;
+                    const base = `/api/patients/doctor/${this.doctorId}/count?period=`;
+                    const [today, week, month, year] = await Promise.all([
+                        fetch(base + 'today', { headers: { Authorization: 'Bearer ' + token } }),
+                        fetch(base + 'week', { headers: { Authorization: 'Bearer ' + token } }),
+                        fetch(base + 'month', { headers: { Authorization: 'Bearer ' + token } }),
+                        fetch(base + 'year', { headers: { Authorization: 'Bearer ' + token } })
+                    ]);
+                    this.todayCount = today.ok ? await today.json() : 0;
+                    this.weekCount = week.ok ? await week.json() : 0;
+                    this.monthCount = month.ok ? await month.json() : 0;
+                    this.yearCount = year.ok ? await year.json() : 0;
+                },
+                async fetchAllAppointments() {
+                    if (!this.doctorId) return;
+                    const res = await fetch(`/api/appointments/doctor/${this.doctorId}`, {
+                        headers: { Authorization: 'Bearer ' + this.token }
+                    });
+                    this.allAppointments = res.ok ? await res.json() : [];
+                    this.generateCalendarData();
+                },
+                openDashboard(id){
+                    window.location = `dashboard.html?pid=${id}`;
+                },
+                doctorNameById(id){
+                    const d = this.doctors.find(x => x.id == id);
+                    return d ? d.name : '-';
+                },
+                logout(){
+                    this.showLogoutConfirm = true;
+                },
+                async init(){
+                    if(!this.token) window.location = 'login.html';
+                    await this.refresh();
+                    await this.fetchCounts();
+                    await this.fetchAllAppointments();
+                    this.updateCalendarTitle();
+                    this.generateCalendarData();
+                }
+            }
+        }
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('doctor', doctor);
+            // Listen for visit count updates from other tabs/windows
+            window.addEventListener('storage', function(event) {
+                if (event.key === 'visitCountUpdated') {
+                    // Find the Alpine component and call refresh and fetchCounts
+                    const root = document.querySelector('[x-data]');
+                    if (root && root.__x) {
+                        root.__x.$data.refresh();
+                        root.__x.$data.fetchCounts();
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

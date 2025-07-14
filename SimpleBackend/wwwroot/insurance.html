@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insurance</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .card { border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
+        .header { background: linear-gradient(to right, #1e3a8a, #3b82f6); }
+        .btn-primary { background-color: #1e3a8a; transition: background-color 0.3s; }
+        .btn-primary:hover { background-color: #1e40af; }
+        .divider { border-top: 1px solid #e5e7eb; }
+    </style>
+</head>
+<body class="bg-gray-50" x-data="insurancePage()" x-init="init()">
+    <header class="header text-white py-4">
+        <div class="container mx-auto px-6 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">Healthcare Portal</h1>
+            <nav>
+                <a href="dashboard.html" class="text-white hover:text-gray-200">Dashboard</a>
+            </nav>
+        </div>
+    </header>
+    <div id="policyContainer" class="container mx-auto px-6 py-8">
+        <div class="flex items-center mb-6">
+            
+            <h2 class="text-2xl font-semibold text-gray-800" x-text="'Insurance Details - ' + (patient?.name || '')">Insurance Details</h2>
+        </div>
+        <div id="policySection" class="bg-white p-8 rounded-lg card">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Policy Information</h3>
+                    <p class="text-gray-600 mb-2"><strong>Provider:</strong> Blue Cross Blue Shield</p>
+                    <p class="text-gray-600 mb-2"><strong>Policy Number:</strong> 123456789</p>
+                    <p class="text-gray-600 mb-2"><strong>Group Number:</strong> ABC123</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Coverage Details</h3>
+                    <p class="text-gray-600 mb-2"><strong>Effective Date:</strong> 2024-01-01</p>
+                    <p class="text-gray-600 mb-2"><strong>Expiration Date:</strong> 2025-12-31</p>
+                    <p class="text-gray-600 mb-2"><strong>Status:</strong> <span class="text-green-600 font-medium">Active</span></p>
+                </div>
+            </div>
+            <div class="divider my-6"></div>
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Contact Information</h3>
+                <p class="text-gray-600 mb-2"><strong>Phone:</strong> 1-800-555-1234</p>
+                <p class="text-gray-600 mb-2"><strong>Email:</strong> support@bcbs.com</p>
+                <p class="text-gray-600 mb-2"><strong>Website:</strong> <a href="https://www.bcbs.com" class="text-blue-600 hover:underline">www.bcbs.com</a></p>
+            </div>
+            <div class="mt-6 flex space-x-4 no-print">
+                <button class="btn-primary text-white px-6 py-2 rounded-md font-medium">Update Insurance</button>
+                <button @click="downloadPolicy" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-md font-medium hover:bg-gray-300">Download Policy</button>
+            </div>
+        </div>
+    </div>
+    <footer class="bg-gray-800 text-white py-4 mt-8">
+        <div class="container mx-auto px-6 text-center">
+            <p class="text-sm">&copy; 2025 Healthcare Portal. All rights reserved.</p>
+        </div>
+    </footer>
+    <script>
+        function insurancePage() {
+            return {
+                patient: null,
+                pid: null,
+                downloadPolicy() {
+                    const hideEls = document.querySelectorAll('.no-print');
+                    hideEls.forEach(el => el.style.visibility = 'hidden');
+                    html2canvas(document.getElementById('policyContainer'), { scale: 2 }).then(canvas => {
+                        hideEls.forEach(el => el.style.visibility = 'visible');
+                        const imgData = canvas.toDataURL('image/png');
+                        const pdf = new jspdf.jsPDF('p', 'pt', 'a4');
+                        const pageWidth = pdf.internal.pageSize.getWidth();
+                        const pageHeight = (canvas.height * pageWidth) / canvas.width;
+                        pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight);
+                        pdf.save('insurance_policy.pdf');
+                        hideEls.forEach(el => el.style.visibility = 'visible');
+                    });
+                },
+                init() {
+                    const id = new URLSearchParams(window.location.search).get('pid');
+                    if (!id) return;
+                    this.pid = id;
+                    fetch(`/api/patients/${id}`)
+                        .then(r => r.ok ? r.json() : Promise.reject('not found'))
+                        .then(p => {
+                            this.patient = p;
+                            document.title = `Insurance - ${p.name}`;
+                        })
+                        .catch(console.error);
+                }
+            }
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@2.8.2/dist/alpine.min.js" defer></script>

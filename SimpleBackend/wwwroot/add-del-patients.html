@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add/Delete Patients</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .header { background: linear-gradient(to right, #1e3a8a, #3b82f6); }
+        .btn-primary { background-color: #1e3a8a; transition: background-color 0.2s; color:#fff; font-weight:600; border-radius:4px; padding:8px 16px; }
+        .btn-primary:hover { background-color: #1e40af; }
+        .card { border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        table { width:100%; border-collapse: collapse; }
+        th,td { padding: 10px; border: 1px solid #e5e7eb; text-align: left; }
+        th { background:#f1f5f9; }
+        tr:hover { background:#f9fafb; cursor:pointer; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div x-data="addDelPatients()">
+        <header class="header py-4 text-white">
+            <div class="container mx-auto px-6 flex items-center justify-between">
+                <h1 class="text-2xl font-bold">Patient Registry</h1>
+                <button class="btn-primary" x-on:click="goBack">Back to Doctor Portal</button>
+            </div>
+        </header>
+        <main class="container mx-auto px-6 py-8">
+            <div class="bg-white p-6 mb-8 card">
+                <h3 class="text-lg font-medium mb-4">Add Patient</h3>
+                <form class="grid md:grid-cols-6 gap-4" x-on:submit.prevent="submit()">
+                    <input x-model="form.name" placeholder="Name" required pattern="^[A-Za-z\\s]+$" oninvalid="this.setCustomValidity('Enter your name correctly')" oninput="this.setCustomValidity('')" class="border rounded p-2">
+                    <input x-model.number="form.age" type="number" min="0" placeholder="Age" class="border rounded p-2">
+                    <select x-model="genderSelect" x-on:change="otherGender = (genderSelect === 'Other'); form.gender = otherGender ? '' : genderSelect" class="border rounded p-2">
+                        <option value="" disabled selected>Gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <template x-if="otherGender">
+                        <input x-model="form.gender" placeholder="Specify gender" class="border rounded p-2">
+                    </template>
+                    <input x-model="form.contact" placeholder="Contact" required pattern="^[0-9]+$" oninvalid="this.setCustomValidity('Enter your contact number correctly')" oninput="this.setCustomValidity('')" class="border rounded p-2">
+                    <input x-model="form.note" placeholder="Note" class="border rounded p-2 md:col-span-2">
+                    <select x-model="form.specialization" required class="border rounded p-2">
+                        <option value="" disabled selected>Field</option>
+                        <option>Cardiology</option>
+                        <option>Dermatology</option>
+                        <option>Endocrinology</option>
+                        <option>Gastroenterology</option>
+                        <option>Hematology</option>
+                        <option>Nephrology</option>
+                        <option>Neurology</option>
+                        <option>Oncology</option>
+                        <option>Ophthalmology</option>
+                        <option>Orthopedics</option>
+                        <option>Otolaryngology</option>
+                        <option>Pediatrics</option>
+                        <option>Psychiatry</option>
+                        <option>Pulmonology</option>
+                        <option>Radiology</option>
+                        <option>Rheumatology</option>
+                        <option>Surgery</option>
+                        <option>Urology</option>
+                    </select>
+                    <button type="submit" class="btn-primary md:col-span-1">Save</button>
+                </form>
+            </div>
+            <div class="bg-white p-6 card">
+                <h3 class="text-lg font-medium mb-4">Your Patients</h3>
+                <table>
+                    <thead>
+                        <tr><th>ID</th><th>Name</th><th>Age</th><th>Gender</th><th>Contact</th><th>Note</th><th>Field</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="p in yourPatients" :key="p.id">
+                            <tr>
+                                <td x-text="p.id"></td>
+                                <td x-text="p.name"></td>
+                                <td x-text="p.age ?? '-' "></td>
+                                <td x-text="p.gender ?? '-' "></td>
+                                <td x-text="p.contact ?? '-' "></td>
+                                <td x-text="p.note ?? '-' "></td>
+                                <td x-text="p.specialization ?? '-' "></td>
+                                <td class="text-right"><button class="text-red-600" x-on:click="remove(p.id)">Delete</button></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script>
+        function addDelPatients(){
+            return {
+                token: localStorage.getItem('token') || '',
+                doctorId: Number(localStorage.getItem('doctorId')) || null,
+                yourPatients: [],
+                form: { name:'', age:null, gender:'', contact:'', note:'', doctorId:'', specialization:'' },
+                genderSelect:'',
+                otherGender:false,
+                async refresh(){
+                    if(!this.token || !this.doctorId) {
+                        window.location = 'login.html';
+                        return;
+                    }
+                    const res = await fetch(`/api/patients/doctor/${this.doctorId}`, { headers: { Authorization: 'Bearer ' + this.token } });
+                    if (!res.ok) {
+                        alert('Session expired or unauthorized. Please login again.');
+                        localStorage.clear();
+                        window.location = 'login.html';
+                        return;
+                    }
+                    this.yourPatients = await res.json();
+                },
+                async submit(){
+                    this.form.doctorId = this.doctorId;
+                    await fetch('/api/patients',{
+                        method:'POST',
+                        headers:{'Content-Type':'application/json', Authorization: 'Bearer ' + this.token },
+                        body: JSON.stringify(this.form)
+                    });
+                    this.form = { name:'', age:null, gender:'', contact:'', note:'', doctorId:'', specialization:'' };
+                    this.genderSelect = '';
+                    this.otherGender = false;
+                    await this.refresh();
+                },
+                async remove(id){
+                    if(!confirm('Delete patient?')) return;
+                    await fetch(`/api/patients/${id}`, {method: 'DELETE', headers: { Authorization: 'Bearer ' + this.token }});
+                    await this.refresh();
+                },
+                goBack(){
+                    window.location = 'doctor.html';
+                },
+                async init(){
+                    await this.refresh();
+                }
+            }
+        }
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('addDelPatients', addDelPatients);
+        });
+    </script>
+</body>
+</html> 

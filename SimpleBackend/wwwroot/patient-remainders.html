@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patient Reminders</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <!-- Load configuration first -->
+  <script src="/static/js/config.js"></script>
+  <!-- Load services -->
+  <script src="/static/js/services/reminderService.js"></script>
+  
+  <script>
+const { useState, useEffect } = React;
+
+function PatientReminders() {
+  const [reminders, setReminders] = useState(() => {
+    const savedData = localStorage.getItem('patientReminders');
+    return savedData ? JSON.parse(savedData) : [];
+  });
+  const [formData, setFormData] = useState({
+    id: null,
+    title: '',
+    date: '',
+    time: '',
+    description: '',
+    phoneNumber: '', // Added for patient phone number
+  });
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Retrieve patient details via pid in query string
+  const pid = new URLSearchParams(window.location.search).get('pid');
+  const [patient, setPatient] = useState(null);
+
+  useEffect(() => {
+    if (pid) {
+      fetch(`/api/patients/${pid}`)
+        .then(r => r.ok ? r.json() : Promise.reject('not found'))
+        .then(setPatient)
+        .catch(console.error);
+    }
+  }, [pid]);
+
+  useEffect(() => {
+    localStorage.setItem('patientReminders', JSON.stringify(reminders));
+  }, [reminders]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const sendReminderMessage = async (reminder) => {
+    const patientName = (patient && patient.name) ? patient.name : 'Patient';
+    const message = `Hello - ${patientName}, Reminder: ${reminder.title} on ${new Date(reminder.date).toLocaleDateString('en-US')} at ${reminder.time}. Call Your Doctor for details.`;
+    try {
+      const result = await ReminderService.sendReminder(reminder.phoneNumber, message);
+      console.log('Reminder sent:', result);
+      return true;
+    } catch (error) {
+      console.error('Failed to send reminder:', error);
+      alert('Failed to send reminder message. Reminder saved locally.');
+      return false;
+    }
+  };
+
+  const handleAdd = () => {
+    if (!formData.title || !formData.date || !formData.time || !formData.phoneNumber) return;
+    const newReminder = {
+      id: Date.now(),
+      title: formData.title,
+      date: formData.date,
+      time: formData.time,
+      description: formData.description,
+      phoneNumber: formData.phoneNumber,
+    };
+    setReminders([...reminders, newReminder]);
+    sendReminderMessage(newReminder); // Send SMS to patient
+    resetForm();
+  };
+
+  const handleEdit = (reminder) => {
+    setFormData(reminder);
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
+    const updatedReminder = { ...formData };
+    setReminders(
+      reminders.map((r) => (r.id === formData.id ? updatedReminder : r))
+    );
+    sendReminderMessage(updatedReminder); // Send SMS to patient
+    resetForm();
+    setIsEditing(false);
+  };
+
+  const handleDelete = (id) => {
+    setReminders(reminders.filter((r) => r.id !== id));
+  };
+
+  const resetForm = () => {
+    setFormData({
+      id: null,
+      title: '',
+      date: '',
+      time: '',
+      description: '',
+      phoneNumber: '',
+    });
+  };
+
+  return React.createElement(
+    'div',
+    { className: 'min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8' },
+    React.createElement(
+      'div',
+      { className: 'max-w-4xl w-full bg-white shadow-xl rounded-2xl p-10' },
+      React.createElement(
+        'header',
+        { className: 'text-center mb-10' },
+        React.createElement(
+          'h1',
+          { className: 'text-3xl font-extrabold text-gray-900 tracking-tight' },
+          'Patient Reminders'
+        ),
+        React.createElement(
+          'p',
+          { className: 'text-sm text-gray-500 mt-2' },
+          'Last Updated: ' + new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
+        )
+      ),
+      React.createElement(
+        'section',
+        { className: 'mb-8' },
+        React.createElement(
+          'h2',
+          { className: 'text-xl font-semibold text-gray-800 mb-6 border-b border-gray-200 pb-2' },
+          isEditing ? 'Edit Reminder' : 'Add New Reminder'
+        ),
+        React.createElement(
+          'div',
+          { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Title'
+            ),
+            React.createElement('input', {
+              type: 'text',
+              name: 'title',
+              value: formData.title,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              placeholder: 'e.g., Medication Follow-Up'
+            })
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Date'
+            ),
+            React.createElement('input', {
+              type: 'date',
+              name: 'date',
+              value: formData.date,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out'
+            })
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Time'
+            ),
+            React.createElement('input', {
+              type: 'time',
+              name: 'time',
+              value: formData.time,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out'
+            })
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Patient Phone Number'
+            ),
+            React.createElement('input', {
+              type: 'tel',
+              name: 'phoneNumber',
+              value: formData.phoneNumber,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              placeholder: 'e.g., +91-123-456-7890'
+            })
+          ),
+          React.createElement(
+            'div',
+            { className: 'md:col-span-2' },
+            React.createElement(
+              'label',
+              { className: 'block text-sm font-medium text-gray-700' },
+              'Description'
+            ),
+            React.createElement('textarea', {
+              name: 'description',
+              value: formData.description,
+              onChange: handleChange,
+              className: 'mt-1 w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out',
+              rows: 4,
+              placeholder: 'e.g., Take medication at 8 PM'
+            })
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-6 flex justify-end space-x-4' },
+          React.createElement(
+            'button',
+            {
+              onClick: isEditing ? handleSave : handleAdd,
+              className: 'bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-200 ease-in-out transform hover:-translate-y-1'
+            },
+            isEditing ? 'Save' : 'Add Reminder'
+          ),
+          (formData.title || formData.date || formData.time || formData.description || formData.phoneNumber) && React.createElement(
+            'button',
+            {
+              onClick: resetForm,
+              className: 'bg-gray-500 text-white font-semibold py-3 px-6 rounded-lg hover:bg-gray-600 transition duration-200 ease-in-out transform hover:-translate-y-1'
+            },
+            'Clear'
+          )
+        )
+      ),
+      React.createElement(
+        'section',
+        null,
+        React.createElement(
+          'h2',
+          { className: 'text-xl font-semibold text-gray-800 mb-6 border-b border-gray-200 pb-2' },
+          'Reminder List'
+        ),
+        reminders.length === 0
+          ? React.createElement(
+              'p',
+              { className: 'text-gray-500 text-sm text-center' },
+              'No reminders have been added yet.'
+            )
+          : React.createElement(
+              'ul',
+              { className: 'space-y-4' },
+              reminders.map((reminder) =>
+                React.createElement(
+                  'li',
+                  {
+                    key: reminder.id,
+                    className: 'bg-gray-100 p-4 rounded-lg flex justify-between items-center transition duration-200 ease-in-out hover:shadow-md'
+                  },
+                  React.createElement(
+                    'div',
+                    null,
+                    React.createElement(
+                      'h3',
+                      { className: 'text-lg font-medium text-gray-900' },
+                      reminder.title
+                    ),
+                    React.createElement(
+                      'p',
+                      { className: 'text-sm text-gray-600' },
+                      new Date(reminder.date + 'T' + reminder.time).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+                    ),
+                    reminder.phoneNumber && React.createElement(
+                      'p',
+                      { className: 'text-sm text-gray-600' },
+                      'Phone: ' + reminder.phoneNumber
+                    ),
+                    reminder.description && React.createElement(
+                      'p',
+                      { className: 'text-sm text-gray-500' },
+                      reminder.description
+                    )
+                  ),
+                  React.createElement(
+                    'div',
+                    { className: 'flex space-x-2' },
+                    React.createElement(
+                      'button',
+                      {
+                        onClick: () => handleEdit(reminder),
+                        className: 'text-indigo-600 hover:text-indigo-800 font-medium'
+                      },
+                      'Edit'
+                    ),
+                    React.createElement(
+                      'button',
+                      {
+                        onClick: () => handleDelete(reminder.id),
+                        className: 'text-red-600 hover:text-red-800 font-medium'
+                      },
+                      'Delete'
+                    )
+                  )
+                )
+              )
+            )
+      ),
+      React.createElement(
+        'div',
+        { className: 'mt-12 flex justify-center' },
+        React.createElement(
+          'a',
+          {
+            href: 'dashboard.html',
+            className: 'inline-block bg-gray-500 text-white font-semibold py-3 px-6 rounded-lg hover:bg-gray-600 transition duration-200 ease-in-out transform hover:-translate-y-1'
+          },
+          'Return to Dashboard'
+        )
+      )
+    )
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(PatientReminders));
+  </script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Lab Reports</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .card { border: 1px solid #e5e7eb; border-radius: 0.75rem; box-shadow: 0 4px 12px rgba(30,58,138,0.08); }
+        .btn-primary { background-color: #1e3a8a; transition: background-color 0.2s; color:#fff; font-weight:600; border-radius:4px; padding:10px 24px; }
+        .btn-primary:hover { background-color: #1e40af; }
+        .btn-secondary { background-color: #059669; color: #fff; font-weight:600; border-radius:4px; padding:10px 24px; }
+        .btn-secondary:hover { background-color: #047857; }
+        .input { border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 10px 14px; font-size: 1rem; width: 100%; }
+        label { font-weight: 500; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col items-center justify-center">
+    <div class="w-full max-w-4xl mx-auto mt-20 mb-16 card bg-white p-14 flex flex-col items-center">
+        <h2 class="text-3xl font-bold mb-8 text-center text-gray-900">Patient Lab Reports</h2>
+        <div class="w-full grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+                <label for="labReportId" class="block text-gray-700 mb-1">Lab Report ID</label>
+                <input type="number" id="labReportId" class="input" />
+            </div>
+            <div>
+                <label for="patientId" class="block text-gray-700 mb-1">Patient ID</label>
+                <input type="number" id="patientId" class="input" />
+            </div>
+        </div>
+        <div class="flex gap-4 w-full mb-6">
+            <button id="fetchReportBtn" class="btn-primary flex-1">Fetch Report</button>
+            <button id="allReportsBtn" class="btn-secondary flex-1">All Reports</button>
+        </div>
+        <div id="result" class="w-full mt-4"></div>
+        <a href="doctor.html" class="mt-8 text-blue-700 hover:underline font-medium">Back to Doctor Dashboard</a>
+    </div>
+    <script>
+        const token = localStorage.getItem('token') || '';
+        function formatDateOnly(val) {
+          if (!val) return '-';
+          if (typeof val === 'string' && val.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+            return val.slice(0, 10);
+          }
+          const d = new Date(val);
+          return isNaN(d) ? val : d.toISOString().slice(0, 10);
+        }
+        document.getElementById('fetchReportBtn').onclick = async function() {
+  const labReportId = document.getElementById('labReportId').value;
+  const patientId = document.getElementById('patientId').value;
+  if (!labReportId || !patientId) {
+    document.getElementById('result').innerHTML = '<span class="text-red-600">Please enter both Lab Report ID and Patient ID.</span>';
+    return;
+  }
+  try {
+    const res = await fetch(`/api/labreports/${labReportId}?patientId=${patientId}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (res.ok) {
+      const report = await res.json();
+      if (!report || Object.keys(report).length === 0) {
+        document.getElementById('result').innerHTML = '<span class="text-yellow-600">No report data found for given IDs.</span>';
+        return;
+      }
+      document.getElementById('result').innerHTML = `<table class='min-w-full text-xs bg-white border'><tbody>${Object.entries(report).map(([k,v]) => `<tr><td class='border px-2 py-1 font-semibold'>${k}</td><td class='border px-2 py-1'>${(['createdAt','updatedAt','dateOfVisit','reportDate','ReportDate','DateOfVisit'].includes(k)) ? formatDateOnly(v) : ((v === null || v === undefined || v === '') ? '-' : v)}</td></tr>`).join('')}</tbody></table>`;
+    } else {
+      let msg = 'No report found for given IDs.';
+      try { msg += '\n' + await res.text(); } catch {}
+      document.getElementById('result').innerHTML = `<span class="text-red-600">${msg}</span>`;
+    }
+  } catch (e) {
+    document.getElementById('result').innerHTML = `<span class="text-red-600">Error fetching report: ${e.message}</span>`;
+  }
+};
+        document.getElementById('allReportsBtn').onclick = async function() {
+  const patientId = document.getElementById('patientId').value;
+  if (!patientId) {
+    document.getElementById('result').innerHTML = '<span class="text-red-600">Please enter Patient ID to fetch all reports.</span>';
+    return;
+  }
+  const doctorId = localStorage.getItem('doctorId');
+  try {
+    const res = await fetch(`/api/labreports/patient/${patientId}?doctorId=${doctorId}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (res.ok) {
+      const reports = await res.json();
+      if (!Array.isArray(reports) || reports.length === 0) {
+        document.getElementById('result').innerHTML = '<span class="text-yellow-600">No reports found for this patient.</span>';
+        return;
+      }
+      let html = '<div class="overflow-x-auto"><table class="min-w-full text-xs bg-white border"><thead><tr>';
+      const keys = Object.keys(reports[0] || {});
+      html += keys.map(k=>`<th class='border px-2 py-1 bg-gray-100'>${k}</th>`).join('');
+      html += '</tr></thead><tbody>';
+      html += reports.map(r => `<tr>${keys.map(k => `<td class='border px-2 py-1'>${(['createdAt','updatedAt','dateOfVisit','reportDate','ReportDate','DateOfVisit'].includes(k)) ? formatDateOnly(r[k]) : ((r[k] === null || r[k] === undefined || r[k] === '') ? '-' : r[k])}</td>`).join('')}</tr>`).join('');
+      html += '</tbody></table></div>';
+      document.getElementById('result').innerHTML = html;
+    } else {
+      let msg = 'Error fetching reports.';
+      try { msg += '\n' + await res.text(); } catch {}
+      document.getElementById('result').innerHTML = `<span class="text-red-600">${msg}</span>`;
+    }
+  } catch (e) {
+    document.getElementById('result').innerHTML = `<span class="text-red-600">Error fetching reports: ${e.message}</span>`;
+  }
+};
+    </script>
+</body>
+</html>
