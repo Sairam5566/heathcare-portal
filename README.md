@@ -65,7 +65,7 @@ The backend auto-creates and migrates the following tables:
 - **MedicalSummaries**: Detailed visit summaries (complaints, history, vitals, doctor notes, medications, etc.)
 - **Labreports**: Lab test results (test name, result, reference range, doctor, notes, etc.)
 
-> See `/SimpleBackend/Migrations/` for SQL migration scripts.
+
 
 ---
 
